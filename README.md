@@ -10,5 +10,5 @@ python3 corrupt.py --dataset MSDS
 
 To run model
 ```python
-python3 main.py --model FCN --dataset MSDS --retrain
+python3 main.py --model FCN2 --dataset MSDS --retrain
 ```
