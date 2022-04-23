@@ -1,5 +1,5 @@
-# DIBI
-Data Imputation using Backpropagation to the Input
+# DINI
+Data Imputation using Neural Inversion
 
 # To Run
 
