@@ -17,11 +17,16 @@ def load_data(dataset):
     out_c = torch.tensor(np.load(f'{output_folder}/{dataset}/out_c.npy'))
     return inp, out, inp_c, out_c
 
-def init_impute(inp_c, out_c, strategy = 'zero'):
+def init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero'):
     if strategy == 'zero':
-        return torch.nan_to_num(inp_c, nan=0), torch.nan_to_num(out_c, nan=0)
+        inp_r, out_r = torch.zeros(inp_c.shape), torch.zeros(out_c.shape)
+    elif strategy == 'random':
+        inp_r, out_r = torch.rand(inp_c.shape), torch.rand(out_c.shape)
     else:
         raise NotImplementedError()
+    inp_r, out_r = inp_r.double(), out_r.double()
+    inp_c[inp_m], out_c[out_m] = inp_r[inp_m], out_r[out_m]
+    return inp_c, out_c
 
 def load_model(modelname, inp, out):
     import src.models
@@ -94,7 +99,7 @@ if __name__ == '__main__':
     inp, out, inp_c, out_c = load_data(args.dataset)
     inp_m, out_m = torch.isnan(inp_c), torch.isnan(out_c)
     inp_m2, out_m2 = torch.logical_not(inp_m), torch.logical_not(out_m)
-    inp_c, out_c = init_impute(inp_c, out_c, strategy = 'zero')
+    inp_c, out_c = init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero')
     model, optimizer, epoch, accuracy_list = load_model(args.model, inp, out)
     print('Starting MSE', (lf(inp_c[inp_m], inp[inp_m]) + lf(out_c[out_m], out[out_m])).item()) 
 
