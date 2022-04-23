@@ -65,14 +65,14 @@ def opt(model, dataloader):
     for inp, out in tqdm(dataloader, leave=False, ncols=80):
         # update input
         inp.requires_grad = True; out.requires_grad = True
-        optimizer = torch.optim.Adam([inp, out] , lr=0.0001)
+        optimizer = torch.optim.Adam([inp, out] , lr=0.0002)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
         iteration = 0; equal = 0; z_old = 100
         while iteration < 800:
             init_old = deepcopy(torch.cat([inp,out]).data)
             pred_i, pred_o = model(inp, out)
             z = lf(pred_o, out) + lf(pred_i, inp)
-            optimizer.zero_grad(); z.backward(); optimizer.step(); scheduler.step()
+            optimizer.zero_grad(); z.backward(); optimizer.step(); #scheduler.step()
             inp.data, out.data = scale(inp.data), scale(out.data)
             equal = equal + 1 if torch.all(init_old - torch.cat([inp,out]) < 0.01) else 0
             if equal > 30: break
