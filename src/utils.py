@@ -1,5 +1,6 @@
 import os
 import torch
+from copy import deepcopy
 
 class color:
     HEADER = '\033[95m'
@@ -21,3 +22,8 @@ def unfreeze_model(model):
 
 def scale(data, low = 0, high = 1):
     return torch.min(torch.max(torch.tensor(low), data), torch.tensor(high))
+
+def mask(data, mask, orig):
+    mask = torch.logical_not(mask)
+    data[mask] = orig[mask]
+    return data

@@ -8,6 +8,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from copy import deepcopy
 
+torch.set_printoptions(sci_mode=True)
+
 def load_data(dataset):
     inp = torch.tensor(np.load(f'{output_folder}/{dataset}/inp.npy'))
     out = torch.tensor(np.load(f'{output_folder}/{dataset}/out.npy'))
@@ -52,7 +54,7 @@ def save_model(model, optimizer, epoch, accuracy_list):
 def backprop(epoch, model, optimizer, dataloader):
     lf = nn.MSELoss(reduction = 'mean')
     ls = []
-    for inp, out in tqdm(dataloader, leave=False, ncols=80):
+    for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
         pred_i, pred_o = model(inp, out)
         loss = lf(pred_o, out) + lf(pred_i, inp)
         ls.append(loss.item())   
@@ -62,19 +64,22 @@ def backprop(epoch, model, optimizer, dataloader):
 def opt(model, dataloader):
     lf = nn.MSELoss(reduction = 'mean')
     ls = []; new_inp, new_out = [], []
-    for inp, out in tqdm(dataloader, leave=False, ncols=80):
+    for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
         # update input
         inp.requires_grad = True; out.requires_grad = True
-        optimizer = torch.optim.Adam([inp, out] , lr=0.0002)
+        optimizer = torch.optim.Adam([inp, out] , lr=0.0001)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
         iteration = 0; equal = 0; z_old = 100
+        inp_orig, out_orig = deepcopy(inp.detach().data), deepcopy(out.detach().data)
         while iteration < 800:
-            init_old = deepcopy(torch.cat([inp,out]).data)
+            inp_old = deepcopy(inp.data); out_old = deepcopy(out.data)
             pred_i, pred_o = model(inp, out)
             z = lf(pred_o, out) + lf(pred_i, inp)
-            optimizer.zero_grad(); z.backward(); optimizer.step(); #scheduler.step()
+            optimizer.zero_grad(); z.backward(); optimizer.step(); scheduler.step()
             inp.data, out.data = scale(inp.data), scale(out.data)
-            equal = equal + 1 if torch.all(init_old - torch.cat([inp,out]) < 0.01) else 0
+            # TODO: Check output after masking
+            inp.data, out.data = mask(inp.data.detach(), inp_m, inp_orig), mask(out.data.detach(), out_m, out_orig)
+            equal = equal + 1 if torch.all(torch.abs(inp_old - inp) < 0.01) and torch.all(torch.abs(out_old - out) < 0.01) else 0
             if equal > 30: break
             iteration += 1; z_old = z.item()
         ls.append(z.item())
@@ -83,16 +88,19 @@ def opt(model, dataloader):
     return torch.cat(new_inp), torch.cat(new_out), np.mean(ls)
  
 if __name__ == '__main__':
-    inp, out, inp_c, out_c = load_data(args.dataset)
-    inp_c, out_c = init_impute(inp_c, out_c, strategy = 'zero')
-    model, optimizer, epoch, accuracy_list = load_model(args.model, inp, out)
-
     num_epochs = 20 if not args.test else 0
     lf = nn.MSELoss(reduction = 'mean')
-    
+
+    inp, out, inp_c, out_c = load_data(args.dataset)
+    inp_m, out_m = torch.isnan(inp_c), torch.isnan(out_c)
+    inp_m2, out_m2 = torch.logical_not(inp_m), torch.logical_not(out_m)
+    inp_c, out_c = init_impute(inp_c, out_c, strategy = 'zero')
+    model, optimizer, epoch, accuracy_list = load_model(args.model, inp, out)
+    print('Starting MSE', (lf(inp_c[inp_m], inp[inp_m]) + lf(out_c[out_m], out[out_m])).item()) 
+
     for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
         # Get Data
-        dataloader = DataLoader(list(zip(inp_c, out_c)), batch_size=512, shuffle=True)
+        dataloader = DataLoader(list(zip(inp_c, out_c, inp_m, out_m)), batch_size=512, shuffle=True)
 
         # Tune Model
         unfreeze_model(model)
@@ -103,6 +111,7 @@ if __name__ == '__main__':
         # Tune Data
         freeze_model(model)
         inp_c, out_c, loss = opt(model, dataloader)
-        dev = lf(inp_c, inp) + lf(out_c, out)
-        tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {dev}')      
+        inp_c[inp_m2], out_c[out_m2] = inp[inp_m2], out[out_m2]
+        dev = lf(inp_c[inp_m], inp[inp_m]) + lf(out_c[out_m], out[out_m])
+        tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {dev.item()}')  
         
