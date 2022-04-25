@@ -100,8 +100,9 @@ if __name__ == '__main__':
     inp_m2, out_m2 = torch.logical_not(inp_m), torch.logical_not(out_m)
     inp_c, out_c = init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero')
     model, optimizer, epoch, accuracy_list = load_model(args.model, inp, out)
-    print('Starting MSE', (lf(inp_c[inp_m], inp[inp_m]) + lf(out_c[out_m], out[out_m])).item()) 
-    # print('Starting MSE', (lf(inp_c[inp_m2], inp[inp_m2]) + lf(out_c[out_m2], out[out_m2])).item()) 
+    data_c = torch.cat([inp_c, out_c], dim=1)[torch.cat([inp_m, out_m], dim=1)]
+    data = torch.cat([inp, out], dim=1)[torch.cat([inp_m, out_m], dim=1)]
+    print('Starting MSE', lf(data_c, data).item()) 
 
     for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
         # Get Data
@@ -116,6 +117,5 @@ if __name__ == '__main__':
         # Tune Data
         freeze_model(model)
         inp_c, out_c, loss = opt(model, dataloader)
-        dev = lf(inp_c[inp_m], inp[inp_m]) + lf(out_c[out_m], out[out_m])
-        tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {dev.item()}')  
-        # tqdm.write(f'Starting MSE {(lf(inp_c[inp_m2], inp[inp_m2]) + lf(out_c[out_m2], out[out_m2])).item()}') 
+        data_c = torch.cat([inp_c, out_c], dim=1)[torch.cat([inp_m, out_m], dim=1)]
+        tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {lf(data_c, data).item()}')  
