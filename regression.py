@@ -45,7 +45,7 @@ def opt(gm, dataset, dataset_m):
         def fn(i):
             gmm_input = deepcopy(d)
             gmm_input[d_m] = i
-            return gm.score_samples([gmm_input])[0]
+            return -gm.score_samples([gmm_input])[0]
         ga = GA(func=fn, n_dim=inp_size, size_pop=4, 
             max_iter=10, prob_mut=0.001, lb=np.zeros(inp_size),
             ub=np.ones(inp_size), precision=1e-4)
