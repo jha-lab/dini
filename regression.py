@@ -5,6 +5,7 @@ from src.folderconstants import *
 import matplotlib.pyplot as plt
 from sklearn.mixture import GaussianMixture
 from sko.GA import GA
+from scipy.optimize import minimize
 from sklearn.metrics import mean_squared_error as mse
 from tqdm import tqdm
 
@@ -42,14 +43,18 @@ def opt(gm, dataset, dataset_m):
             new_dataset.append(d)
             continue
         inp_size = np.sum(d_m + 0)
+        inp = np.zeros(inp_size)
         def fn(i):
             gmm_input = deepcopy(d)
             gmm_input[d_m] = i
             return -gm.score_samples([gmm_input])[0]
-        ga = GA(func=fn, n_dim=inp_size, size_pop=4, 
-            max_iter=10, prob_mut=0.001, lb=np.zeros(inp_size),
-            ub=np.ones(inp_size), precision=1e-4)
-        best_x, best_y = ga.run()
+        # ga = PSO(func=fn, n_dim=inp_size, size_pop=4, 
+        #     max_iter=10, prob_mut=0.001, lb=np.zeros(inp_size),
+        #     ub=np.ones(inp_size), precision=1e-4)
+        ga = minimize(fn, inp, method='L-BFGS-B', 
+            bounds=[(0, 1)]*inp_size)
+        # best_x, best_y = ga.run()
+        best_x = ga.x
         gmm_input = deepcopy(d)
         gmm_input[d_m] = best_x
         new_dataset.append(gmm_input)
