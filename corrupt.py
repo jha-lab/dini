@@ -21,7 +21,7 @@ def process(dataset, corruption):
 	folder = os.path.join(output_folder, dataset)
 	os.makedirs(folder, exist_ok=True)
 	data_file = f'{data_folder}/{dataset}/data.csv'
-	df = pd.read_csv(data_file, index_col=0, nrows=10000)
+	df = pd.read_csv(data_file, index_col=0, nrows=1000)
 	df = normalize(df)
 	if corruption == 'MACR':
 		corrupt_df = MACR(df)

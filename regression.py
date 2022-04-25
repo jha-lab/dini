@@ -16,7 +16,7 @@ def load_data(dataset):
     out_c = np.load(f'{output_folder}/{dataset}/out_c.npy')
     data = np.concatenate([inp, out], axis=1)
     data_c = np.concatenate([inp_c, out_c], axis=1)
-    return inp, inp_c
+    return data, data_c
 
 def init_impute(data_c, data_m, strategy = 'zero'):
     if strategy == 'zero':
@@ -48,12 +48,8 @@ def opt(gm, dataset, dataset_m):
             gmm_input = deepcopy(d)
             gmm_input[d_m] = i
             return -gm.score_samples([gmm_input])[0]
-        # ga = PSO(func=fn, n_dim=inp_size, size_pop=4, 
-        #     max_iter=10, prob_mut=0.001, lb=np.zeros(inp_size),
-        #     ub=np.ones(inp_size), precision=1e-4)
         ga = minimize(fn, inp, method='L-BFGS-B', 
             bounds=[(0, 1)]*inp_size)
-        # best_x, best_y = ga.run()
         best_x = ga.x
         gmm_input = deepcopy(d)
         gmm_input[d_m] = best_x
@@ -65,7 +61,7 @@ if __name__ == '__main__':
     data_m = np.isnan(data_c)
     data_c = init_impute(data_c, data_m, strategy = 'zero')
     subset = correct_subset(data_c, data_m)
-    gm = GaussianMixture(n_components=20, random_state=0).fit(subset)
+    gm = GaussianMixture(n_components=50, random_state=0).fit(subset)
 
     print('Starting MSE', mse(data[data_m], data_c[data_m]))
     

@@ -5,6 +5,7 @@ from src.folderconstants import *
 import torch
 import numpy as np
 from torch.utils.data import DataLoader
+from sklearn.metrics import mean_squared_error as mse
 from tqdm import tqdm
 from copy import deepcopy
 
@@ -92,7 +93,7 @@ def opt(model, dataloader):
     return torch.cat(new_inp), torch.cat(new_out), np.mean(ls)
  
 if __name__ == '__main__':
-    num_epochs = 20 if not args.test else 0
+    num_epochs = 100 if not args.test else 0
     lf = nn.MSELoss(reduction = 'mean')
 
     inp, out, inp_c, out_c = load_data(args.dataset)
@@ -100,9 +101,11 @@ if __name__ == '__main__':
     inp_m2, out_m2 = torch.logical_not(inp_m), torch.logical_not(out_m)
     inp_c, out_c = init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero')
     model, optimizer, epoch, accuracy_list = load_model(args.model, inp, out)
-    data_c = torch.cat([inp_c, out_c], dim=1)[torch.cat([inp_m, out_m], dim=1)]
-    data = torch.cat([inp, out], dim=1)[torch.cat([inp_m, out_m], dim=1)]
-    print('Starting MSE', lf(data_c, data).item()) 
+    data_c = torch.cat([inp_c, out_c], dim=1)
+    data_m = torch.cat([inp_m, out_m], dim=1)
+    data = torch.cat([inp, out], dim=1)
+
+    print('Starting MSE', lf(data[data_m], data_c[data_m]).item()) 
 
     for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
         # Get Data
@@ -117,5 +120,5 @@ if __name__ == '__main__':
         # Tune Data
         freeze_model(model)
         inp_c, out_c, loss = opt(model, dataloader)
-        data_c = torch.cat([inp_c, out_c], dim=1)[torch.cat([inp_m, out_m], dim=1)]
-        tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {lf(data_c, data).item()}')  
+        data_c = torch.cat([inp_c, out_c], dim=1)
+        tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {lf(data[data_m], data_c[data_m]).item()}')  
