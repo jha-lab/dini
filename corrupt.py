@@ -6,7 +6,7 @@ from src.corrupt_parser import *
 
 datasets = ['MSDS']
 
-def MACR(df, fraction = 0.1):
+def MCAR(df, fraction = 0.1):
 	df2 = df.copy(deep=True)
 	size = df.values.shape[1]*df.values.shape[0]
 	indices = np.random.choice(size, replace=False,
@@ -23,10 +23,10 @@ def process(dataset, corruption):
 	data_file = f'{data_folder}/{dataset}/data.csv'
 	df = pd.read_csv(data_file, index_col=0, nrows=1000)
 	df = normalize(df)
-	if corruption == 'MACR':
-		corrupt_df = MACR(df)
+	if corruption == 'MCAR':
+		corrupt_df = MCAR(df)
 	else:
-		corrupt_df = MACR(df)
+		corrupt_df = MCAR(df)
 	if dataset == 'MSDS':
 		def split(df):
 			inp_col = [col for col in df.columns if 'cpu' in col]

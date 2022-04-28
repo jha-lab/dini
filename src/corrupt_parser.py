@@ -1,6 +1,6 @@
 import argparse
 
-parser = argparse.ArgumentParser(description='Time-Series Anomaly Detection')
+parser = argparse.ArgumentParser(description='DINI')
 parser.add_argument('--dataset', 
 					metavar='-d', 
 					type=str, 
@@ -11,6 +11,6 @@ parser.add_argument('--strategy',
 					metavar='-s', 
 					type=str, 
 					required=False,
-					default='MACR',
-                    help="corruption strategy from ['MACR']")
+					default='MCAR',
+                    help="corruption strategy from ['MCAR']")
 args = parser.parse_args()
