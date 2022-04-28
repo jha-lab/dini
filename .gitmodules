@@ -1,0 +1,3 @@
+[submodule "GRAPE"]
+	path = GRAPE
+	url = https://github.com/maxiaoba/GRAPE.git
