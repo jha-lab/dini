@@ -131,7 +131,7 @@ class GAINTrainer:
         self.discriminator.train()
         self.generator.train()
         device = torch.device('cpu')
-        b_loader = tqdm(loader)
+        b_loader = loader
         for _, x_batch, _, m_batch in b_loader:
             x_batch, m_batch = x_batch.to(device), m_batch.to(device)
             self.g_optimizer.zero_grad()
