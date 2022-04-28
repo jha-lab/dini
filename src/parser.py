@@ -5,14 +5,14 @@ parser.add_argument('--dataset',
 					metavar='-d', 
 					type=str, 
 					required=False,
-					default='synthetic',
-                    help="dataset from ['synthetic', 'SMD']")
+					default='MSDS',
+                    help="dataset from ['MSDS']")
 parser.add_argument('--model', 
 					metavar='-m', 
 					type=str, 
 					required=False,
-					default='LSTM_Multivariate',
-                    help="model name")
+					default='FCN2',
+                    help="model name from ['FCN', 'FCN2']")
 parser.add_argument('--test', 
 					action='store_true', 
 					help="test the model")
