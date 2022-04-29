@@ -1,8 +1,10 @@
 import os
 import pandas as pd
 import numpy as np
+import torch
 from src.folderconstants import *
 from src.corrupt_parser import *
+from src.corrupt_utils import *
 
 datasets = ['MSDS']
 
@@ -10,8 +12,25 @@ def MCAR(df, fraction = 0.1):
 	df2 = df.copy(deep=True)
 	size = df.values.shape[1]*df.values.shape[0]
 	indices = np.random.choice(size, replace=False,
-                           size=int(size * fraction))
+						   size=int(size * fraction))
 	df2.values[np.unravel_index(indices, df.values.shape)] = None
+	return df2
+
+def MAR(df, fraction = 0.1, p_obs = 0.5):
+	df2 = df.copy(deep=True)
+	mask = MAR_mask(df.values, fraction, p_obs).double()
+	df2.values[mask.bool()] = None
+	return df2
+
+def MNAR(df, fraction = 0.1, p_obs = 0.5, opt = "logistic", q = None):
+	df2 = df.copy(deep=True)
+	if opt == "logistic":
+		mask = MNAR_mask_logistic(df.values, fraction, p_obs).double()
+	elif opt == "quantile":
+		mask = MNAR_mask_quantiles(df.values.double(), fraction, q, 1 - p_obs).double()
+	elif opt == "selfmasked":
+		mask = MNAR_self_mask_logistic(df.values.double(), fraction).double()
+	df2.values[mask.bool()] = None
 	return df2
 
 def normalize(df):
@@ -25,8 +44,12 @@ def process(dataset, corruption):
 	df = normalize(df)
 	if corruption == 'MCAR':
 		corrupt_df = MCAR(df)
+	elif corruption == 'MAR':
+		corrupt_df = MAR(df)
+	elif corruption == 'MNAR':
+		corrupt_df = MNAR(df)
 	else:
-		corrupt_df = MCAR(df)
+		raise NotImplementedError()
 	if dataset == 'MSDS':
 		def split(df):
 			inp_col = [col for col in df.columns if 'cpu' in col]
