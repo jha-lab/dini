@@ -22,14 +22,14 @@ def MAR(df, fraction = 0.3, p_obs = 0.5):
 	df2.values[mask.bool()] = None
 	return df2
 
-def MNAR(df, fraction = 0.1, p_obs = 0.5, opt = "logistic", q = None):
+def MNAR(df, fraction = 0.1, p_obs = 0.5, opt = "selfmasked", q = 0.3):
 	df2 = df.copy(deep=True)
 	if opt == "logistic":
 		mask = MNAR_mask_logistic(df.values, fraction, p_obs).double()
 	elif opt == "quantile":
-		mask = MNAR_mask_quantiles(df.values.double(), fraction, q, 1 - p_obs).double()
+		mask = MNAR_mask_quantiles(df.values, fraction, q, 1 - p_obs).double()
 	elif opt == "selfmasked":
-		mask = MNAR_self_mask_logistic(df.values.double(), fraction).double()
+		mask = MNAR_self_mask_logistic(df.values, fraction).double()
 	df2.values[mask.bool()] = None
 	return df2
 
