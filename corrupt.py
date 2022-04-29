@@ -16,7 +16,7 @@ def MCAR(df, fraction = 0.1):
 	df2.values[np.unravel_index(indices, df.values.shape)] = None
 	return df2
 
-def MAR(df, fraction = 0.1, p_obs = 0.5):
+def MAR(df, fraction = 0.3, p_obs = 0.5):
 	df2 = df.copy(deep=True)
 	mask = MAR_mask(df.values, fraction, p_obs).double()
 	df2.values[mask.bool()] = None
@@ -57,7 +57,7 @@ def process(dataset, corruption):
 			return df[inp_col].values, df[out_col].values
 	elif dataset == 'concrete':
 		def split(df):
-			return df.iloc[:, :-1].values, df.iloc[:, -1].values
+			return df.iloc[:, :-1].values, df.iloc[:, -1].values.reshape(-1, 1)
 	inp, out = split(df)
 	inp_c, out_c = split(corrupt_df)
 	for file in ['inp', 'out', 'inp_c', 'out_c']:
