@@ -66,7 +66,9 @@ if __name__ == '__main__':
     print('Starting MSE', mse(data[data_m], data_c_imputed[data_m]))
 
     if args.model == 'mean':
-        data_new = SimpleFill().fit_transform(data_c)
+        data_new = SimpleFill(fill_method='mean').fit_transform(data_c)
+    elif args.model == 'median':
+        data_new = SimpleFill(fill_method='median').fit_transform(data_c)
     elif args.model == 'knn':
         k = [3,10,50][0]
         data_new = KNN(k=k, verbose=False).fit_transform(data_c)
