@@ -55,6 +55,9 @@ def process(dataset, corruption):
 			inp_col = [col for col in df.columns if 'cpu' in col]
 			out_col = [col for col in df.columns if 'mem' in col]
 			return df[inp_col].values, df[out_col].values
+	elif dataset == 'concrete':
+		def split(df):
+			return df.iloc[:, :-1].values, df.iloc[:, -1].values
 	inp, out = split(df)
 	inp_c, out_c = split(corrupt_df)
 	for file in ['inp', 'out', 'inp_c', 'out_c']:
