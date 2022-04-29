@@ -334,12 +334,13 @@ if __name__ == '__main__':
     parser.add_argument('--transfer_dir', type=str, default=None)
     parser.add_argument('--transfer_extra', type=str, default='')
     parser.add_argument('--mode', type=str, default='train') # debug
+    parser.add_argument('--dataset', type=str, default='MSDS')
     subparsers = parser.add_subparsers()
     add_uci_subparser(subparsers)
     add_mc_subparser(subparsers)
     grape_args = parser.parse_args()
 
-    inp, out, inp_c, out_c = load_data(args.dataset)
+    inp, out, inp_c, out_c = load_data(grape_args.dataset)
     inp_m, out_m = torch.isnan(inp_c).float(), torch.isnan(out_c).float()
     # inp_c, out_c = init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero')
 
