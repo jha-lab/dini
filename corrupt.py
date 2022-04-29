@@ -58,6 +58,9 @@ def process(dataset, corruption):
 	elif dataset == 'concrete':
 		def split(df):
 			return df.iloc[:, :-1].values, df.iloc[:, -1].values.reshape(-1, 1)
+	elif dataset == 'linear':
+		def split(df):
+			return df.iloc[:, :-5].values, df.iloc[:, -5:].values
 	inp, out = split(df)
 	inp_c, out_c = split(corrupt_df)
 	for file in ['inp', 'out', 'inp_c', 'out_c']:
