@@ -5,6 +5,7 @@ from src.folderconstants import *
 import torch
 import numpy as np
 from torch.utils.data import DataLoader
+from fancyimpute import *
 from sklearn.metrics import mean_squared_error as mse
 from tqdm import tqdm
 from copy import deepcopy
@@ -23,6 +24,8 @@ def init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero'):
         inp_r, out_r = torch.zeros(inp_c.shape), torch.zeros(out_c.shape)
     elif strategy == 'random':
         inp_r, out_r = torch.rand(inp_c.shape), torch.rand(out_c.shape)
+    elif strategy == 'mean':
+        inp_r, out_r = torch.Tensor(SimpleFill().fit_transform(inp_c)), torch.Tensor(SimpleFill().fit_transform(out_c))
     else:
         raise NotImplementedError()
     inp_r, out_r = inp_r.double(), out_r.double()
