@@ -5,10 +5,10 @@ Data Imputation using Neural Inversion
 
 To generate corrupt data
 ```python
-python3 corrupt.py --dataset MSDS
+python3 corrupt.py --dataset MSDS --strategy MNAR
 ```
 
-To run model
+To run DINI model
 ```python
-python3 main.py --model FCN2 --dataset MSDS --retrain
+python3 dini.py --model FCN2 --dataset MSDS --retrain
 ```
