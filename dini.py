@@ -7,6 +7,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 from fancyimpute import *
 from sklearn.metrics import mean_squared_error as mse
+from sklearn.metrics import mean_absolute_error as mae
 from tqdm import tqdm
 from copy import deepcopy
 
@@ -124,4 +125,6 @@ if __name__ == '__main__':
         freeze_model(model)
         inp_c, out_c, loss = opt(model, dataloader)
         data_c = torch.cat([inp_c, out_c], dim=1)
-        tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {lf(data[data_m], data_c[data_m]).item()}')  
+        tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {lf(data[data_m], data_c[data_m]).item()},\tMAE = {mae(data[data_m].detach().numpy(), data_c[data_m].detach().numpy())}')  
+
+    

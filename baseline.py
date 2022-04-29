@@ -5,6 +5,7 @@ from src.folderconstants import *
 import matplotlib.pyplot as plt
 from fancyimpute import *
 from sklearn.metrics import mean_squared_error as mse
+from sklearn.metrics import mean_absolute_error as mae
 from tqdm import tqdm
 from copy import deepcopy
 
@@ -87,3 +88,4 @@ if __name__ == '__main__':
         raise NotImplementedError()
 
     print('Final MSE', mse(data[data_m], data_new[data_m]))
+    print('Final MAE', mae(data[data_m], data_new[data_m]))

@@ -12,6 +12,7 @@ import time
 import os
 import json
 from sklearn.metrics import mean_squared_error as mse
+from sklearn.metrics import mean_absolute_error as mae
 from tqdm import tqdm
 
 import sys
@@ -379,3 +380,4 @@ if __name__ == '__main__':
     labels = np.concatenate([train_labels1, test_labels1, train_labels2, test_labels2])
 
     print('Final MSE: ', mse(pred, labels))
+    print('Final MAE: ', mae(pred, labels))
