@@ -94,8 +94,24 @@ def opt(model, dataloader):
         ls.append(z.item())
         inp.requires_grad = False; out.requires_grad = False
         new_inp.append(inp); new_out.append(out)
-    return torch.cat(new_inp), torch.cat(new_out), np.mean(ls)
- 
+    return torch.cat(new_inp), torch.cat(new_out)
+
+def forward_opt(model, dataloader):
+    new_inp, new_out = [], []
+    for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
+        iteration = 0; equal = 0
+        eps = 1e-6
+        inp_orig, out_orig = deepcopy(inp.detach().data), deepcopy(out.detach().data)
+        while iteration < 1800:
+            inp_old = deepcopy(inp.data); out_old = deepcopy(out.data)
+            inp, out = model(inp, out)
+            inp.data, out.data = mask(inp.data.detach(), inp_m, inp_orig), mask(out.data.detach(), out_m, out_orig)
+            equal = equal + 1 if torch.all(torch.abs(inp_old - inp) < eps) and torch.all(torch.abs(out_old - out) < eps) else 0
+            if equal > 30: break
+            iteration += 1
+        new_inp.append(inp); new_out.append(out)
+    return torch.cat(new_inp), torch.cat(new_out)
+
 if __name__ == '__main__':
     num_epochs = 100 if not args.test else 0
     lf = nn.MSELoss(reduction = 'mean')
@@ -123,8 +139,7 @@ if __name__ == '__main__':
 
         # Tune Data
         freeze_model(model)
-        inp_c, out_c, loss = opt(model, dataloader)
+        inp_c, out_c = forward_opt(model, dataloader)
         data_c = torch.cat([inp_c, out_c], dim=1)
         tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {lf(data[data_m], data_c[data_m]).item()},\tMAE = {mae(data[data_m].detach().numpy(), data_c[data_m].detach().numpy())}')  
-
     
