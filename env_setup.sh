@@ -39,7 +39,7 @@ else
 		MACOSX_DEPLOYMENT_TARGET=12.3 CC=clang CXX=clang++ python -m pip --no-cache-dir install torch-sparse -f https://data.pyg.org/whl/torch-1.11.0+${cpu}.html
 		MACOSX_DEPLOYMENT_TARGET=12.3 CC=clang CXX=clang++ python -m pip --no-cache-dir install torch-geometric
 
-		# Install fancyimpute
+		# Install fancyimpute (noarch version for Apple M1)
 		conda install -c conda-forge fancyimpute
 
 		# Conda prefers pip packages to be installed in the end
