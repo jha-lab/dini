@@ -6,7 +6,6 @@ from src.folderconstants import *
 from src.corrupt_parser import *
 from src.corrupt_utils import *
 
-datasets = ['MSDS']
 
 def MCAR(df, fraction = 0.1):
 	df2 = df.copy(deep=True)
@@ -16,7 +15,7 @@ def MCAR(df, fraction = 0.1):
 	df2.values[np.unravel_index(indices, df.values.shape)] = None
 	return df2
 
-def MAR(df, fraction = 0.3, p_obs = 0.5):
+def MAR(df, fraction = 0.1, p_obs = 0.5):
 	df2 = df.copy(deep=True)
 	mask = MAR_mask(df.values, fraction, p_obs).double()
 	df2.values[mask.bool()] = None
@@ -36,18 +35,18 @@ def MNAR(df, fraction = 0.1, p_obs = 0.5, opt = "selfmasked", q = 0.3):
 def normalize(df):
 	return (df-df.min())/(df.max()-df.min())
 
-def process(dataset, corruption):
+def process(dataset, corruption, fraction = 0.1):
 	folder = os.path.join(output_folder, dataset)
 	os.makedirs(folder, exist_ok=True)
 	data_file = f'{data_folder}/{dataset}/data.csv'
 	df = pd.read_csv(data_file, index_col=0, nrows=1000)
 	df = normalize(df)
 	if corruption == 'MCAR':
-		corrupt_df = MCAR(df)
+		corrupt_df = MCAR(df, fraction)
 	elif corruption == 'MAR':
-		corrupt_df = MAR(df)
+		corrupt_df = MAR(df, fraction)
 	elif corruption == 'MNAR':
-		corrupt_df = MNAR(df)
+		corrupt_df = MNAR(df, fraction)
 	else:
 		raise NotImplementedError()
 	if dataset == 'MSDS':
