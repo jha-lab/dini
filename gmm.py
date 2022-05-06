@@ -1,5 +1,4 @@
 import numpy as np
-from src.parser import *
 from src.utils import *
 from src.folderconstants import *
 import matplotlib.pyplot as plt
@@ -57,6 +56,7 @@ def opt(gm, dataset, dataset_m):
     return np.array(new_dataset)
  
 if __name__ == '__main__':
+    from src.parser import *
     data, data_c = load_data(args.dataset)
     data_m = np.isnan(data_c)
     data_c = init_impute(data_c, data_m, strategy = 'zero')

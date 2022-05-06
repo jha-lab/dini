@@ -1,5 +1,4 @@
 import numpy as np
-from src.parser import *
 from src.utils import *
 from src.folderconstants import *
 import matplotlib.pyplot as plt
@@ -189,7 +188,7 @@ class GAINTrainer:
 
         sq_error = torch.sum(((1 - mask) * x_original - (1 - mask) * imputed_data) ** 2)
         rmse = torch.sqrt(sq_error / ((1-mask).sum())).detach().cpu().item()
-        return {mode+"-RMSE": rmse}
+        return {mode+"-RMSE": rmse}, imputed_data
 
     def log_results(self, res_dict):
         if not os.path.isdir(self.result_dir):
@@ -207,7 +206,7 @@ class GAINTrainer:
         self.discriminator.to(device)
         self.generator.to(device)
 
-        t_loader = tqdm(range(200))
+        t_loader = tqdm(range(200), ncols=80)
 
         for i in t_loader:
             self.train_step(train_loader)
@@ -218,18 +217,18 @@ class GAINTrainer:
             t_loader.set_description(desc)
 
             if (self.epoch + 1) % 20 == 0:
-                train_eval = self.eval_model(train_loader, mode="train")
-                test_eval = self.eval_model(test_loader, mode="test")
-                print(json.dumps(train_eval))
-                print(json.dumps(test_eval))
+                train_eval, imputed_data = self.eval_model(train_loader, mode="train")
+                test_eval, imputed_data = self.eval_model(test_loader, mode="test")
+                json.dumps(train_eval)
+                json.dumps(test_eval)
 
-        train_eval = self.eval_model(train_loader, mode="train")
-        test_eval = self.eval_model(test_loader, mode="test")
+        train_eval, imputed_data = self.eval_model(train_loader, mode="train")
+        test_eval, imputed_data = self.eval_model(test_loader, mode="test")
         perf_dict = train_eval
         perf_dict.update(test_eval)
         # self.log_results(perf_dict)
         # self.save_checkpoint()
-        return perf_dict
+        return perf_dict, imputed_data
 
 def load_data(dataset):
     inp = torch.tensor(np.load(f'{output_folder}/{dataset}/inp.npy'), dtype=torch.float)
@@ -250,6 +249,7 @@ def init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero'):
     return inp_c, out_c
  
 if __name__ == '__main__':
+    from src.parser import *
     inp, out, inp_c, out_c = load_data(args.dataset)
     inp_m, out_m = torch.isnan(inp_c).float(), torch.isnan(out_c).float()
     # inp_c, out_c = init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero')

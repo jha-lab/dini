@@ -1,5 +1,4 @@
 from src.models import *
-from src.parser import *
 from src.utils import *
 from src.folderconstants import *
 import torch
@@ -33,13 +32,13 @@ def init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero'):
     inp_c[inp_m], out_c[out_m] = inp_r[inp_m], out_r[out_m]
     return inp_c, out_c
 
-def load_model(modelname, inp, out):
+def load_model(modelname, inp, out, dataset, retrain, test):
     import src.models
     model_class = getattr(src.models, modelname)
-    model = model_class(inp.shape[1], out.shape[1], 32).double()
-    optimizer = torch.optim.Adam(model.parameters() , lr=1e-3, weight_decay=1e-5)
-    fname = f'{checkpoints_folder}/{args.dataset}/{args.model}.ckpt'
-    if os.path.exists(fname) and (not args.retrain or args.test):
+    model = model_class(inp.shape[1], out.shape[1], 128).double()
+    optimizer = torch.optim.Adam(model.parameters() , lr=5e-4, weight_decay=1e-5)
+    fname = f'{checkpoints_folder}/{dataset}/{modelname}.ckpt'
+    if os.path.exists(fname) and (not retrain or test):
         print(f"{color.GREEN}Loading pre-trained model: {model.name}{color.ENDC}")
         checkpoint = torch.load(fname)
         model.load_state_dict(checkpoint['model_state_dict'])
@@ -51,10 +50,10 @@ def load_model(modelname, inp, out):
         epoch = -1; accuracy_list = []
     return model, optimizer, epoch, accuracy_list
 
-def save_model(model, optimizer, epoch, accuracy_list):
-    folder = f'{checkpoints_folder}/{args.dataset}/'
+def save_model(model, optimizer, epoch, accuracy_list, dataset, modelname):
+    folder = f'{checkpoints_folder}/{dataset}/'
     os.makedirs(folder, exist_ok=True)
-    file_path = f'{folder}{args.model}.ckpt'
+    file_path = f'{folder}{modelname}.ckpt'
     torch.save({
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
@@ -113,6 +112,7 @@ def forward_opt(model, dataloader):
     return torch.cat(new_inp), torch.cat(new_out)
 
 if __name__ == '__main__':
+    from src.parser import *
     num_epochs = 100 if not args.test else 0
     lf = nn.MSELoss(reduction = 'mean')
 
@@ -120,7 +120,7 @@ if __name__ == '__main__':
     inp_m, out_m = torch.isnan(inp_c), torch.isnan(out_c)
     inp_m2, out_m2 = torch.logical_not(inp_m), torch.logical_not(out_m)
     inp_c, out_c = init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero')
-    model, optimizer, epoch, accuracy_list = load_model(args.model, inp, out)
+    model, optimizer, epoch, accuracy_list = load_model(args.model, inp, out, args.dataset, args.retrain, args.test)
     data_c = torch.cat([inp_c, out_c], dim=1)
     data_m = torch.cat([inp_m, out_m], dim=1)
     data = torch.cat([inp, out], dim=1)
@@ -129,13 +129,13 @@ if __name__ == '__main__':
 
     for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
         # Get Data
-        dataloader = DataLoader(list(zip(inp_c, out_c, inp_m, out_m)), batch_size=512, shuffle=False)
+        dataloader = DataLoader(list(zip(inp_c, out_c, inp_m, out_m)), batch_size=1, shuffle=False)
 
         # Tune Model
         unfreeze_model(model)
         loss = backprop(e, model, optimizer, dataloader)
         accuracy_list.append(loss)
-        save_model(model, optimizer, e, accuracy_list)
+        save_model(model, optimizer, e, accuracy_list, args.dataset, args.model)
 
         # Tune Data
         freeze_model(model)

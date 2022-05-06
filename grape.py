@@ -1,5 +1,4 @@
 import numpy as np
-from src.parser import *
 from src.utils import *
 from src.folderconstants import *
 import matplotlib.pyplot as plt
@@ -30,7 +29,7 @@ from utils.utils import build_optimizer, objectview, get_known_mask, mask_edge
 
 
 # GRAPE trainer from: https://github.com/maxiaoba/GRAPE/blob/0ea0c59272a977d0184a8fd95178f68211455ef5/training/gnn_mdi.py
-def train_gnn_mdi(data, args, log_path, device=torch.device('cpu')):
+def train_gnn_mdi(data, args, log_path, device=torch.device('cpu'), verbose=True):
     model = get_gnn(data, args).to(device)
     if args.impute_hiddens == '':
         impute_hiddens = []
@@ -50,13 +49,13 @@ def train_gnn_mdi(data, args, log_path, device=torch.device('cpu')):
                             dropout=args.dropout).to(device)
     if args.transfer_dir: # this ensures the valid mask is consistant
         load_path = './{}/test/{}/{}/'.format(args.domain,args.data,args.transfer_dir)
-        print("loading fron {} with {}".format(load_path,args.transfer_extra))
+        if verbose: print("loading fron {} with {}".format(load_path,args.transfer_extra))
         model = torch.load(load_path+'model'+args.transfer_extra+'.pt',map_location=device)
         impute_model = torch.load(load_path+'impute_model'+args.transfer_extra+'.pt',map_location=device)
 
     trainable_parameters = list(model.parameters()) \
                            + list(impute_model.parameters())
-    print("total trainable_parameters: ",len(trainable_parameters))
+    if verbose: print("total trainable_parameters: ",len(trainable_parameters))
     # build optimizer
     scheduler, opt = build_optimizer(args, trainable_parameters)
 
@@ -117,7 +116,7 @@ def train_gnn_mdi(data, args, log_path, device=torch.device('cpu')):
     else:
         train_edge_index, train_edge_attr, train_labels =\
              all_train_edge_index, all_train_edge_attr, all_train_labels
-        print("train edge num is {}, test edge num is input {}, output {}"\
+        if verbose: print("train edge num is {}, test edge num is input {}, output {}"\
                 .format(
                 train_edge_attr.shape[0],
                 test_input_edge_attr.shape[0], test_edge_attr.shape[0]))
@@ -222,13 +221,13 @@ def train_gnn_mdi(data, args, log_path, device=torch.device('cpu')):
             Train_loss.append(train_loss)
             Test_rmse.append(test_rmse)
             Test_l1.append(test_l1)
-            print('epoch: ', epoch)
-            print('loss: ', train_loss)
+            if verbose: print('epoch: ', epoch)
+            if verbose: print('loss: ', train_loss)
             if args.valid > 0.:
                 print('valid rmse: ', valid_rmse)
                 print('valid l1: ', valid_l1)
-            print('test rmse: ', test_rmse)
-            print('test l1: ', test_l1)
+            if verbose: print('test rmse: ', test_rmse)
+            if verbose: print('test l1: ', test_l1)
 
     pred_train = pred_train.detach().cpu().numpy()
     label_train = label_train.detach().cpu().numpy()
@@ -298,11 +297,12 @@ def init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero'):
         inp_r, out_r = torch.rand(inp_c.shape), torch.rand(out_c.shape)
     else:
         raise NotImplementedError()
-    inp_r, out_r = inp_r.double(), out_r.double()
+    inp_r, out_r = inp_r.float(), out_r.float()
     inp_c[inp_m], out_c[out_m] = inp_r[inp_m], out_r[out_m]
     return inp_c, out_c
  
 if __name__ == '__main__':
+    from src.parser import *
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_types', type=str, default='EGSAGE_EGSAGE_EGSAGE')
     parser.add_argument('--post_hiddens', type=str, default=None,) # default to be 1 hidden of node_dim
