@@ -1,5 +1,4 @@
 import numpy as np
-from src.parser import *
 from src.utils import *
 from src.folderconstants import *
 import matplotlib.pyplot as plt
@@ -28,36 +27,9 @@ def init_impute(data_c, data_m, strategy = 'zero'):
         raise NotImplementedError()
     data_c[data_m] = data_r[data_m]
     return data_c
-
-def correct_subset(data_c, data_m):
-    subset = []
-    for i in range(data_c.shape[0]):
-        if not np.any(data_m[i]):
-            subset.append(data_c[i])
-    return np.array(subset)
-
-def opt(gm, dataset, dataset_m):
-    new_dataset = []
-    for i in tqdm(range(dataset.shape[0]), ncols=80):
-        d, d_m = dataset[i], dataset_m[i]
-        if not np.any(d_m):
-            new_dataset.append(d)
-            continue
-        inp_size = np.sum(d_m + 0)
-        inp = np.zeros(inp_size)
-        def fn(i):
-            gmm_input = deepcopy(d)
-            gmm_input[d_m] = i
-            return -gm.score_samples([gmm_input])[0]
-        ga = minimize(fn, inp, method='L-BFGS-B', 
-            bounds=[(0, 1)]*inp_size)
-        best_x = ga.x
-        gmm_input = deepcopy(d)
-        gmm_input[d_m] = best_x
-        new_dataset.append(gmm_input)
-    return np.array(new_dataset)
  
 if __name__ == '__main__':
+    from src.parser import *
     data, data_c = load_data(args.dataset)
     data_m = np.isnan(data_c)
     
