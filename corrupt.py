@@ -5,6 +5,10 @@ import torch
 from src.folderconstants import *
 from src.corrupt_parser import *
 from src.corrupt_utils import *
+from matplotlib import pyplot as plt
+
+
+VISUALIZE = False
 
 
 def MCAR(df, fraction = 0.1):
@@ -41,7 +45,7 @@ def MPAR(df, fraction = 0.1, patch_size = 5):
 	patch_size = min(patch_size, min(df.values.shape[0], df.values.shape[1]))
 	size = (df.values.shape[0] - patch_size) * (df.values.shape[1] - patch_size)
 	indices = np.random.choice(size, replace=False,
-						   size=int(size * fraction / patch_size / patch_size))
+						   size=int(size * fraction / (patch_size * patch_size)))
 	indices = np.unravel_index(indices, (df.values.shape[0] - patch_size, df.values.shape[1] - patch_size))
 	patch_indices = []
 	for i in range(len(indices[0])):
@@ -52,7 +56,7 @@ def MPAR(df, fraction = 0.1, patch_size = 5):
 		df2.values[idx] = None
 	return df2
 
-def MSAR(df, fraction = 0.3, stream_size = 10):
+def MSAR(df, fraction = 0.1, stream_size = 10):
 	"""Missing Streams At Random"""
 	df2 = df.copy(deep=True)
 	stream_size = min(stream_size, min(df.values.shape[0], df.values.shape[1]))
@@ -71,11 +75,19 @@ def MSAR(df, fraction = 0.3, stream_size = 10):
 def normalize(df):
 	return (df-df.min())/(df.max()-df.min())
 
+def visualize(df, dataset, corruption, fraction):
+	plt.imshow(df, aspect='auto')
+	plt.colorbar()
+	plt.xticks(range(df.values.shape[1]), df.columns, rotation=45)
+	fraction_str = str(args.fraction).split(".")[-1]
+	plt.title(f'Dataset: {dataset.upper()} | Corruption strategy: {corruption.upper()} | Fraction: {fraction}')
+	plt.savefig(f'./heatmaps/heatmap_{dataset.lower()}_{corruption.lower()}_p{fraction_str}.pdf', bbox_inches='tight')
+
 def process(dataset, corruption, fraction = 0.1):
 	folder = os.path.join(output_folder, dataset)
 	os.makedirs(folder, exist_ok=True)
 	data_file = f'{data_folder}/{dataset}/data.csv'
-	df = pd.read_csv(data_file, index_col=0, nrows=1000)
+	df = pd.read_csv(data_file, index_col=0, nrows=1000 if not VISUALIZE else 200)
 	df = normalize(df)
 	if corruption == 'MCAR':
 		corrupt_df = MCAR(df, fraction)
@@ -89,6 +101,7 @@ def process(dataset, corruption, fraction = 0.1):
 		corrupt_df = MSAR(df, fraction)
 	else:
 		raise NotImplementedError()
+	if VISUALIZE: visualize(corrupt_df, dataset, corruption, fraction)
 	if dataset == 'MSDS':
 		def split(df):
 			inp_col = [col for col in df.columns if 'cpu' in col]
