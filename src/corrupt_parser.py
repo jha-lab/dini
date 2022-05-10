@@ -12,7 +12,7 @@ parser.add_argument('--strategy',
 					type=str, 
 					required=False,
 					default='MCAR',
-                    help="corruption strategy from ['MCAR', 'MAR', 'MNAR', 'MPAR']")
+                    help="corruption strategy from ['MCAR', 'MAR', 'MNAR', 'MPAR', 'MSAR']")
 parser.add_argument('--fraction',
 					metavar='-f',
 					type=float,

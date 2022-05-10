@@ -52,6 +52,22 @@ def MPAR(df, fraction = 0.1, patch_size = 5):
 		df2.values[idx] = None
 	return df2
 
+def MSAR(df, fraction = 0.3, stream_size = 10):
+	"""Missing Streams At Random"""
+	df2 = df.copy(deep=True)
+	stream_size = min(stream_size, min(df.values.shape[0], df.values.shape[1]))
+	size = (df.values.shape[0] - stream_size) * df.values.shape[1]
+	indices = np.random.choice(size, replace=False,
+						   size=int(size * fraction / stream_size))
+	indices = np.unravel_index(indices, (df.values.shape[0] - stream_size, df.values.shape[1]))
+	stream_indices = []
+	for i in range(len(indices[0])):
+		for si in range(stream_size):
+			stream_indices.append((indices[0][i] + si, indices[1][i]))
+	for idx in stream_indices:
+		df2.values[idx] = None
+	return df2
+
 def normalize(df):
 	return (df-df.min())/(df.max()-df.min())
 
@@ -69,6 +85,8 @@ def process(dataset, corruption, fraction = 0.1):
 		corrupt_df = MNAR(df, fraction)
 	elif corruption == 'MPAR':
 		corrupt_df = MPAR(df, fraction)
+	elif corruption == 'MSAR':
+		corrupt_df = MSAR(df, fraction)
 	else:
 		raise NotImplementedError()
 	if dataset == 'MSDS':
