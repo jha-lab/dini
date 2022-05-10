@@ -52,7 +52,7 @@ if __name__ == '__main__':
                         type=str, 
                         required=False,
                         default='MCAR',
-                        help="corruption strategy from ['MCAR', 'MAR', 'MNAR']")
+                        help="corruption strategy from ['MCAR', 'MAR', 'MNAR', 'MPAR', 'MSAR']")
     parser.add_argument('--fraction',
                         metavar='-f',
                         type=float,
@@ -105,7 +105,7 @@ if __name__ == '__main__':
 
     # Run GMM
     subset = correct_subset(data_c_imputed, data_m)
-    gm = GaussianMixture(n_components=50, random_state=0).fit(subset)
+    gm = GaussianMixture(n_components=30, random_state=0).fit(subset)
 
     data_new = gmm_opt(gm, data_c, data_m)
     print(f'GMM MSE:\t', mse(data[data_m], data_new[data_m]))
@@ -211,7 +211,7 @@ if __name__ == '__main__':
     results['grape'] = [mse(data[data_m], data_new[data_m]), mae(data[data_m], data_new[data_m])]
 
     # Run DINI
-    num_epochs = 80
+    num_epochs = 100
     lf = nn.MSELoss(reduction = 'mean')
 
     inp, out, inp_c, out_c = load_data_sep(args.dataset)
