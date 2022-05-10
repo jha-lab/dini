@@ -8,6 +8,7 @@ from src.corrupt_utils import *
 
 
 def MCAR(df, fraction = 0.1):
+	"""Missing Completely At Random"""
 	df2 = df.copy(deep=True)
 	size = df.values.shape[1]*df.values.shape[0]
 	indices = np.random.choice(size, replace=False,
@@ -16,12 +17,14 @@ def MCAR(df, fraction = 0.1):
 	return df2
 
 def MAR(df, fraction = 0.1, p_obs = 0.5):
+	"""Missing At Random"""
 	df2 = df.copy(deep=True)
 	mask = MAR_mask(df.values, fraction, p_obs).double()
 	df2.values[mask.bool()] = None
 	return df2
 
 def MNAR(df, fraction = 0.1, p_obs = 0.5, opt = "selfmasked", q = 0.3):
+	"""Missing Not At Random"""
 	df2 = df.copy(deep=True)
 	if opt == "logistic":
 		mask = MNAR_mask_logistic(df.values, fraction, p_obs).double()
@@ -30,6 +33,23 @@ def MNAR(df, fraction = 0.1, p_obs = 0.5, opt = "selfmasked", q = 0.3):
 	elif opt == "selfmasked":
 		mask = MNAR_self_mask_logistic(df.values, fraction).double()
 	df2.values[mask.bool()] = None
+	return df2
+
+def MPAR(df, fraction = 0.1, patch_size = 5):
+	"""Missing Patches At Random"""
+	df2 = df.copy(deep=True)
+	patch_size = min(patch_size, min(df.values.shape[0], df.values.shape[1]))
+	size = (df.values.shape[0] - patch_size) * (df.values.shape[1] - patch_size)
+	indices = np.random.choice(size, replace=False,
+						   size=int(size * fraction / patch_size / patch_size))
+	indices = np.unravel_index(indices, (df.values.shape[0] - patch_size, df.values.shape[1] - patch_size))
+	patch_indices = []
+	for i in range(len(indices[0])):
+		for pi in range(patch_size):
+			for pj in range(patch_size):
+				patch_indices.append((indices[0][i] + pi, indices[1][i] + pj))
+	for idx in patch_indices:
+		df2.values[idx] = None
 	return df2
 
 def normalize(df):
@@ -47,6 +67,8 @@ def process(dataset, corruption, fraction = 0.1):
 		corrupt_df = MAR(df, fraction)
 	elif corruption == 'MNAR':
 		corrupt_df = MNAR(df, fraction)
+	elif corruption == 'MPAR':
+		corrupt_df = MPAR(df, fraction)
 	else:
 		raise NotImplementedError()
 	if dataset == 'MSDS':
@@ -60,6 +82,9 @@ def process(dataset, corruption, fraction = 0.1):
 	elif dataset == 'linear':
 		def split(df):
 			return df.iloc[:, :-5].values, df.iloc[:, -5:].values
+	elif dataset == 'diamonds':
+		def split(df):
+			return df.iloc[:, :-2].values, df.iloc[:, -2:].values
 	inp, out = split(df)
 	inp_c, out_c = split(corrupt_df)
 	for file in ['inp', 'out', 'inp_c', 'out_c']:
