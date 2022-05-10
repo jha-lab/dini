@@ -6,13 +6,13 @@ parser.add_argument('--dataset',
 					type=str, 
 					required=False,
 					default='MSDS',
-                    help="dataset from ['MSDS', 'concrete', 'linear']")
+                    help="dataset from ['MSDS', 'concrete', 'linear', 'diamonds']")
 parser.add_argument('--strategy', 
 					metavar='-s', 
 					type=str, 
 					required=False,
 					default='MCAR',
-                    help="corruption strategy from ['MCAR', 'MAR', 'MNAR']")
+                    help="corruption strategy from ['MCAR', 'MAR', 'MNAR', 'MPAR']")
 parser.add_argument('--fraction',
 					metavar='-f',
 					type=float,
