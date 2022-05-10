@@ -36,7 +36,7 @@ def load_model(modelname, inp, out, dataset, retrain, test):
     import src.models
     model_class = getattr(src.models, modelname)
     model = model_class(inp.shape[1], out.shape[1], 128).double()
-    optimizer = torch.optim.Adam(model.parameters() , lr=5e-4, weight_decay=1e-5)
+    optimizer = torch.optim.Adam(model.parameters() , lr=0.001, weight_decay=1e-5)
     fname = f'{checkpoints_folder}/{dataset}/{modelname}.ckpt'
     if os.path.exists(fname) and (not retrain or test):
         print(f"{color.GREEN}Loading pre-trained model: {model.name}{color.ENDC}")
