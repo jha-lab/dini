@@ -211,7 +211,7 @@ if __name__ == '__main__':
     results['grape'] = [mse(data[data_m], data_new[data_m]), mae(data[data_m], data_new[data_m])]
 
     # Run DINI
-    num_epochs = 30
+    num_epochs = 80
     lf = nn.MSELoss(reduction = 'mean')
 
     inp, out, inp_c, out_c = load_data_sep(args.dataset)
@@ -224,6 +224,7 @@ if __name__ == '__main__':
     data_m = torch.cat([inp_m, out_m], dim=1)
     data = torch.cat([inp, out], dim=1)
 
+    early_stop_patience, curr_patience, old_loss = 3, 0, np.inf
     for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
         # Get Data
         dataloader = DataLoader(list(zip(inp_c, out_c, inp_m, out_m)), batch_size=1, shuffle=False)
@@ -239,6 +240,10 @@ if __name__ == '__main__':
         inp_c, out_c = opt(model, dataloader)
         data_c = torch.cat([inp_c, out_c], dim=1)
         tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {lf(data[data_m], data_c[data_m]).item()},\tMAE = {mae(data[data_m].detach().numpy(), data_c[data_m].detach().numpy())}')  
+
+        if lf(data[data_m], data_c[data_m]).item() >= old_loss: curr_patience += 1
+        if curr_patience > early_stop_patience: break
+        old_loss = lf(data[data_m], data_c[data_m]).item()
 
     print('DINI MSE:\t', lf(data[data_m], data_c[data_m]).item())
     print('DINI MSE\t', mae(data[data_m].detach().numpy(), data_c[data_m].detach().numpy()))
