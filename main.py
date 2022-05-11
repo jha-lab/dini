@@ -66,35 +66,48 @@ if __name__ == '__main__':
 
     data, data_c = load_data_all(args.dataset)
     data_m = np.isnan(data_c)
-    
+
     data_c_imputed = init_impute_all(data_c, data_m, strategy = 'zero')
+
+    inp, out, inp_c, out_c = load_data_sep(args.dataset)
+    inp_m, out_m = torch.isnan(inp_c), torch.isnan(out_c)
+    inp_c_imputed, out_c_imputed = init_impute_sep(inp_c, out_c, inp_m, out_m, strategy = 'zero')
 
     print('Starting MSE:\t', mse(data[data_m], data_c_imputed[data_m]))
     print('Starting MAE:\t', mae(data[data_m], data_c_imputed[data_m]))
 
-    results = {'corrupted': [mse(data[data_m], data_c_imputed[data_m]), mae(data[data_m], data_c_imputed[data_m])]}
+    # results = {'corrupted': [mse(data[data_m], data_c_imputed[data_m]), mae(data[data_m], data_c_imputed[data_m])]}
+    results = {}
 
     # Run baselines
     baseline_models = ['mean', 'median', 'knn', 'svd', 'mice', 'spectral', 'matrix']
     for model in baseline_models:
         if model == 'mean':
-            data_new = SimpleFill(fill_method='mean').fit_transform(data_c)
+            inp_new, out_new = SimpleFill(fill_method='mean').fit_transform(inp_c), SimpleFill(fill_method='mean').fit_transform(out_c)
+            data_new = np.concatenate((inp_new, out_new), axis=1)
         elif model == 'median':
-            data_new = SimpleFill(fill_method='median').fit_transform(data_c)
+            inp_new, out_new = SimpleFill(fill_method='median').fit_transform(inp_c), SimpleFill(fill_method='median').fit_transform(out_c)
+            data_new = np.concatenate((inp_new, out_new), axis=1)
         elif model == 'knn':
-            k = [3,10,50][0]
-            data_new = KNN(k=k, verbose=False).fit_transform(data_c)
+            k = [1,5,10][0]
+            inp_new, out_new = KNN(k=k, verbose=False).fit_transform(inp_c), KNN(k=k, verbose=False).fit_transform(out_c)
+            data_new = np.concatenate((inp_new, out_new), axis=1)
         elif model == 'svd':
-            rank = [np.ceil((data_c.shape[1]-1)/10),np.ceil((data_c.shape[1]-1)/5), data_c.shape[1]-1][0]
-            data_new = IterativeSVD(rank=int(rank), verbose=False).fit_transform(data_c)
+            inp_rank = [np.ceil((inp_c.shape[1]-1)/10),np.ceil((inp_c.shape[1]-1)/5), inp_c.shape[1]-1][0]
+            out_rank = [np.ceil((out_c.shape[1]-1)/10),np.ceil((out_c.shape[1]-1)/5), out_c.shape[1]-1][0]
+            inp_new, out_new = IterativeSVD(rank=int(inp_rank), verbose=False).fit_transform(inp_c), IterativeSVD(rank=int(out_rank), verbose=False).fit_transform(out_c)
+            data_new = np.concatenate((inp_new, out_new), axis=1)
         elif model == 'mice':
-            max_iter = [3,10,50][0]
-            data_new = IterativeImputer(max_iter=max_iter).fit_transform(data_c)
+            max_iter = [1,5,10][0]
+            inp_new, out_new = IterativeImputer(max_iter=1).fit_transform(inp_c), IterativeImputer(max_iter=1).fit_transform(out_c)
+            data_new = np.concatenate((inp_new, out_new), axis=1)
         elif model == 'spectral':
-            sparsity = [0.5,None,3][0]
-            data_new = SoftImpute(shrinkage_value=sparsity, verbose=False).fit_transform(data_c)
+            sparsity = [0.5,None,1][0]
+            inp_new, out_new = SoftImpute(shrinkage_value=sparsity, verbose=False).fit_transform(inp_c), SoftImpute(shrinkage_value=sparsity, verbose=False).fit_transform(out_c)
+            data_new = np.concatenate((inp_new, out_new), axis=1)
         elif model == 'matrix':
-            data_new = MatrixFactorization(verbose=False).fit_transform(data_c)
+            inp_new, out_new = MatrixFactorization(verbose=False).fit_transform(inp_c), MatrixFactorization(verbose=False).fit_transform(out_c)
+            data_new = np.concatenate((inp_new, out_new), axis=1)
         else:
             raise NotImplementedError()
 
@@ -104,30 +117,45 @@ if __name__ == '__main__':
         results[model] = [mse(data[data_m], data_new[data_m]), mae(data[data_m], data_new[data_m])]
 
     # Run GMM
-    subset = correct_subset(data_c_imputed, data_m)
-    gm = GaussianMixture(n_components=30, random_state=0).fit(subset)
+    subset = correct_subset(inp_c_imputed.numpy(), inp_m.numpy().astype(bool))
+    gm = GaussianMixture(n_components=10, random_state=0).fit(subset)
+    inp_new = gmm_opt(gm, inp_c_imputed.numpy(), inp_m.numpy().astype(bool))
 
-    data_new = gmm_opt(gm, data_c, data_m)
+    subset = correct_subset(out_c_imputed.numpy(), out_m.numpy().astype(bool))
+    gm = GaussianMixture(n_components=10, random_state=0).fit(subset)
+    out_new = gmm_opt(gm, out_c_imputed.numpy(), out_m.numpy().astype(bool))
+
+    data_new = np.concatenate((inp_new, out_new), axis=1)
+
+    # subset = correct_subset(data_c_imputed, data_m)
+    # gm = GaussianMixture(n_components=30, random_state=0).fit(subset)
+
+    # data_new = gmm_opt(gm, data_c, data_m)
+
     print(f'GMM MSE:\t', mse(data[data_m], data_new[data_m]))
     print(f'GMM MAE:\t', mae(data[data_m], data_new[data_m]))
 
     results['gmm'] = [mse(data[data_m], data_new[data_m]), mae(data[data_m], data_new[data_m])]
 
     # Run GAIN
-    inp, out, inp_c, out_c = load_data_sep(args.dataset)
-    inp_m, out_m = torch.isnan(inp_c), torch.isnan(out_c)
-    inp_c_imputed, out_c_imputed = init_impute_sep(inp_c, out_c, inp_m, out_m, strategy = 'zero')
-    inp_m, out_m = inp_c.float(), out_c.float()
+    inp_m_float, out_m_float = inp_m.float(), out_m.float()
 
-    dataloader = DataLoader(list(zip(inp, inp_c, out_c, (1-inp_m))), batch_size=128, shuffle=False)
+    dataloader_forward = DataLoader(list(zip(inp, inp_c, out_c, (1-inp_m_float))), batch_size=128, shuffle=False)
+    dataloader_backward = DataLoader(list(zip(out, out_c, inp_c, (1-out_m_float))), batch_size=128, shuffle=False)
     
+    # Train forward model
     trainer = GAINTrainer(inp_c.shape[1], out_c.shape[1], {'min': torch.zeros(inp_c.shape[1]), 'max': torch.ones(inp_c.shape[1])}, args)
-    perf_dict, imputed_data = trainer.train_model(dataloader, dataloader)
-    data_new = torch.cat((imputed_data, out_c_imputed), dim=1)
+    perf_dict, inp_imputed = trainer.train_model(dataloader_forward, dataloader_forward)
+
+    # Train backward model
+    trainer = GAINTrainer(out_c.shape[1], inp_c.shape[1], {'min': torch.zeros(out_c.shape[1]), 'max': torch.ones(out_c.shape[1])}, args)
+    perf_dict, out_imputed = trainer.train_model(dataloader_backward, dataloader_backward)
+
+    data_new = torch.cat((inp_imputed, out_imputed), dim=1)
     print(f'GAIN MSE:\t', mse(data[data_m], data_new[data_m]))
     print(f'GAIN MAE:\t', mae(data[data_m], data_new[data_m]))
 
-    results['gain'] = [mse(data[data_m], data_new[data_m]), mae(data[data_m], data_new[data_m])]
+    results['gain*'] = [mse(data[data_m], data_new[data_m]), mae(data[data_m], data_new[data_m])]
 
     # Run GRAPE
     parser = argparse.ArgumentParser()
@@ -142,7 +170,7 @@ if __name__ == '__main__':
     parser.add_argument('--gnn_activation', type=str, default='relu')
     parser.add_argument('--impute_hiddens', type=str, default='64')
     parser.add_argument('--impute_activation', type=str, default='relu')
-    parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--epochs', type=int, default=1000)
     parser.add_argument('--opt', type=str, default='adam')
     parser.add_argument('--opt_scheduler', type=str, default='none')
     parser.add_argument('--opt_restart', type=int, default=0)
@@ -208,7 +236,7 @@ if __name__ == '__main__':
     print('GRAPE MSE:\t', mse(pred, labels))
     print('GRAPE MAE:\t', mae(pred, labels))
 
-    results['grape'] = [mse(data[data_m], data_new[data_m]), mae(data[data_m], data_new[data_m])]
+    results['grape*'] = [mse(pred, labels), mae(pred, labels)]
 
     # Run DINI
     num_epochs = 100
@@ -233,7 +261,7 @@ if __name__ == '__main__':
         unfreeze_model(model)
         loss = backprop(e, model, optimizer, dataloader)
         accuracy_list.append(loss)
-        save_model(model, optimizer, e, accuracy_list, args.dataset, 'FCN2')
+        save_model(model, optimizer, e, accuracy_list, args.dataset, f'FCN2_{args.strategy}')
 
         # Tune Data
         freeze_model(model)
