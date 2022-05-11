@@ -13,6 +13,7 @@ import json
 from sklearn.metrics import mean_squared_error as mse
 from sklearn.metrics import mean_absolute_error as mae
 from tqdm import tqdm
+from copy import deepcopy
 
 import sys
 sys.path.append('./GRAPE/')
@@ -126,7 +127,7 @@ def train_gnn_mdi(data, args, log_path, device=torch.device('cpu'), verbose=True
     obj = dict()
     obj['args'] = args
     obj['outputs'] = dict()
-    for epoch in range(args.epochs):
+    for epoch in tqdm(range(args.epochs), ncols=80):
         model.train()
         impute_model.train()
         known_mask = get_known_mask(args.known, int(train_edge_attr.shape[0] / 2)).to(device)
@@ -291,6 +292,7 @@ def load_data(dataset):
     return inp, out, inp_c, out_c
 
 def init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero'):
+    inp_c_imputed, out_c_imputed = deepcopy(inp_c), deepcopy(out_c)
     if strategy == 'zero':
         inp_r, out_r = torch.zeros(inp_c.shape), torch.zeros(out_c.shape)
     elif strategy == 'random':
@@ -298,8 +300,8 @@ def init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero'):
     else:
         raise NotImplementedError()
     inp_r, out_r = inp_r.float(), out_r.float()
-    inp_c[inp_m], out_c[out_m] = inp_r[inp_m], out_r[out_m]
-    return inp_c, out_c
+    inp_c_imputed[inp_m], out_c_imputed[out_m] = inp_r[inp_m], out_r[out_m]
+    return inp_c_imputed, out_c_imputed
  
 if __name__ == '__main__':
     from src.parser import *
