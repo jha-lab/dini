@@ -90,7 +90,7 @@ if __name__ == '__main__':
             data_new = np.concatenate((inp_new, out_new), axis=1)
         elif model == 'knn':
             k = [1,5,10][0]
-            inp_new, out_new = KNN(k=k, verbose=False).fit_transform(inp_c), KNN(k=k, verbose=False).fit_transform(out_c)
+            inp_new, out_new = KNN(k=1, verbose=False).fit_transform(inp_c), KNN(k=1, verbose=False).fit_transform(out_c)
             data_new = np.concatenate((inp_new, out_new), axis=1)
         elif model == 'svd':
             inp_rank = [np.ceil((inp_c.shape[1]-1)/10),np.ceil((inp_c.shape[1]-1)/5), inp_c.shape[1]-1][0]
