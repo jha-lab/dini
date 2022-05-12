@@ -95,7 +95,7 @@ if __name__ == '__main__':
         elif model == 'svd':
             inp_rank = [np.ceil((inp_c.shape[1]-1)/10),np.ceil((inp_c.shape[1]-1)/5), inp_c.shape[1]-1][0]
             out_rank = [np.ceil((out_c.shape[1]-1)/10),np.ceil((out_c.shape[1]-1)/5), out_c.shape[1]-1][0]
-            inp_new, out_new = IterativeSVD(rank=int(inp_rank), verbose=False).fit_transform(inp_c), IterativeSVD(rank=int(out_rank), verbose=False).fit_transform(out_c)
+            inp_new, out_new = IterativeSVD(rank=int(inp_rank), verbose=False).fit_transform(inp_c), IterativeSVD(rank=int(out_rank), verbose=False).fit_transform(out_c) if out_c.shape[1] > 1 else out_c_imputed
             data_new = np.concatenate((inp_new, out_new), axis=1)
         elif model == 'mice':
             max_iter = [1,5,10][0]
