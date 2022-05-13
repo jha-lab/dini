@@ -36,7 +36,7 @@ def load_model(modelname, inp, out, dataset, retrain, test):
     import src.models
     model_class = getattr(src.models, modelname)
     model = model_class(inp.shape[1], out.shape[1], 128).double()
-    optimizer = torch.optim.Adam(model.parameters() , lr=0.001, weight_decay=1e-5)
+    optimizer = torch.optim.Adam(model.parameters() , lr=0.0005, weight_decay=1e-5)
     fname = f'{checkpoints_folder}/{dataset}/{modelname}.ckpt'
     if os.path.exists(fname) and (not retrain or test):
         print(f"{color.GREEN}Loading pre-trained model: {model.name}{color.ENDC}")
@@ -76,7 +76,7 @@ def opt(model, dataloader):
     for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
         # update input
         inp.requires_grad = True; out.requires_grad = True
-        optimizer = torch.optim.Adam([inp, out] , lr=0.001)
+        optimizer = torch.optim.Adam([inp, out] , lr=0.0005)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
         iteration = 0; equal = 0; z_old = 100
         inp_orig, out_orig = deepcopy(inp.detach().data), deepcopy(out.detach().data)
