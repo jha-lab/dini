@@ -18,6 +18,7 @@ from sklearn.mixture import GaussianMixture
 from grape import load_data as load_data_sep, init_impute as init_impute_sep, train_gnn_mdi
 from gain import GAINGenerator, GAINDiscriminator, GAINTrainer
 from dini import load_model, save_model, backprop, opt
+from sklearn.linear_model import LinearRegression, SGDRegressor
 
 import sys
 sys.path.append('./GRAPE/')
@@ -46,7 +47,7 @@ if __name__ == '__main__':
                         type=str, 
                         required=False,
                         default='MSDS',
-                        help="dataset from ['MSDS', 'concrete', 'linear']")
+                        help="dataset from ['concrete', 'diamonds', 'energy', 'flights']")
     parser.add_argument('--strategy', 
                         metavar='-s', 
                         type=str, 
@@ -90,7 +91,7 @@ if __name__ == '__main__':
             data_new = np.concatenate((inp_new, out_new), axis=1)
         elif model == 'knn':
             k = [1,5,10][0]
-            inp_new, out_new = KNN(k=1, verbose=False).fit_transform(inp_c), KNN(k=1, verbose=False).fit_transform(out_c)
+            inp_new, out_new = KNN(k=1, use_argpartition=True, verbose=False).fit_transform(inp_c), KNN(k=1, use_argpartition=True, verbose=False).fit_transform(out_c)
             data_new = np.concatenate((inp_new, out_new), axis=1)
         elif model == 'svd':
             inp_rank = [np.ceil((inp_c.shape[1]-1)/10),np.ceil((inp_c.shape[1]-1)/5), inp_c.shape[1]-1][0]
@@ -99,17 +100,20 @@ if __name__ == '__main__':
             data_new = np.concatenate((inp_new, out_new), axis=1)
         elif model == 'mice':
             max_iter = [1,5,10][0]
-            inp_new, out_new = IterativeImputer(max_iter=1).fit_transform(inp_c), IterativeImputer(max_iter=1).fit_transform(out_c)
+            inp_new, out_new = IterativeImputer(max_iter=1, n_nearest_features=1, imputation_order='descending', estimator=SGDRegressor()).fit_transform(inp_c), IterativeImputer(max_iter=1, n_nearest_features=1, imputation_order='descending', estimator=SGDRegressor()).fit_transform(out_c)
             data_new = np.concatenate((inp_new, out_new), axis=1)
         elif model == 'spectral':
             sparsity = [0.5,None,1][0]
-            inp_new, out_new = SoftImpute(shrinkage_value=sparsity, verbose=False).fit_transform(inp_c), SoftImpute(shrinkage_value=sparsity, verbose=False).fit_transform(out_c)
+            inp_new, out_new = SoftImpute(max_iters=1, shrinkage_value=0.5, verbose=False).fit_transform(inp_c), SoftImpute(max_iters=1, shrinkage_value=0.5, verbose=False).fit_transform(out_c)
             data_new = np.concatenate((inp_new, out_new), axis=1)
         elif model == 'matrix':
-            inp_new, out_new = MatrixFactorization(verbose=False).fit_transform(inp_c), MatrixFactorization(verbose=False).fit_transform(out_c)
+            inp_new, out_new = MatrixFactorization(max_iters=1, rank=1, learning_rate=0.1, verbose=False).fit_transform(inp_c), MatrixFactorization(max_iters=1, rank=1, learning_rate=0.1, verbose=False).fit_transform(out_c)
             data_new = np.concatenate((inp_new, out_new), axis=1)
         else:
             raise NotImplementedError()
+
+        data_new_m = np.isnan(data_new)
+        data_new = init_impute_all(data_new, data_new_m, strategy = 'zero')
 
         print(f'{model.upper()} MSE:\t', mse(data[data_m], data_new[data_m]))
         print(f'{model.upper()} MAE:\t', mae(data[data_m], data_new[data_m]))
@@ -170,7 +174,7 @@ if __name__ == '__main__':
     parser.add_argument('--gnn_activation', type=str, default='relu')
     parser.add_argument('--impute_hiddens', type=str, default='64')
     parser.add_argument('--impute_activation', type=str, default='relu')
-    parser.add_argument('--epochs', type=int, default=1000)
+    parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--opt', type=str, default='adam')
     parser.add_argument('--opt_scheduler', type=str, default='none')
     parser.add_argument('--opt_restart', type=int, default=0)
