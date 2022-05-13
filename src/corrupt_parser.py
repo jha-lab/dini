@@ -6,7 +6,7 @@ parser.add_argument('--dataset',
 					type=str, 
 					required=False,
 					default='MSDS',
-                    help="dataset from ['MSDS', 'concrete', 'linear', 'diamonds']")
+                    help="dataset from ['concrete', 'diamonds', 'energy', 'flights']")
 parser.add_argument('--strategy', 
 					metavar='-s', 
 					type=str, 
