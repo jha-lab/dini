@@ -206,7 +206,7 @@ class GAINTrainer:
         self.discriminator.to(device)
         self.generator.to(device)
 
-        t_loader = tqdm(range(1000), ncols=80)
+        t_loader = tqdm(range(100), ncols=80)
 
         for i in t_loader:
             self.train_step(train_loader)
