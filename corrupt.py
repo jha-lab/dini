@@ -88,6 +88,7 @@ def process(dataset, corruption, fraction = 0.1):
 	os.makedirs(folder, exist_ok=True)
 	data_file = f'{data_folder}/{dataset}/data.csv'
 	df = pd.read_csv(data_file, index_col=0, nrows=1000 if not VISUALIZE else 200)
+	assert not np.any(np.isnan(df.values))
 	df = normalize(df)
 	if corruption == 'MCAR':
 		corrupt_df = MCAR(df, fraction)
@@ -116,6 +117,9 @@ def process(dataset, corruption, fraction = 0.1):
 	elif dataset == 'housing':
 		def split(df):
 			return df.iloc[:, :-1].values, df.iloc[:, -1].values.reshape(-1, 1)
+	elif dataset == 'naval':
+		def split(df):
+			return df.iloc[:, :-2].values, df.iloc[:, -2:].values
 	elif dataset == 'accelerometer':
 		def split(df):
 			return df.iloc[:, 0:2].values, df.iloc[:, 2:].values
@@ -132,6 +136,7 @@ def process(dataset, corruption, fraction = 0.1):
 		def split(df):
 			return df.iloc[:, :-5].values, df.iloc[:, -5:].values
 	inp, out = split(df)
+	assert not np.any(np.isnan(inp)) and not np.any(np.isnan(out))
 	inp_c, out_c = split(corrupt_df)
 	for file in ['inp', 'out', 'inp_c', 'out_c']:
 		np.save(os.path.join(folder, f'{file}.npy'), eval(file).astype('float64'))
