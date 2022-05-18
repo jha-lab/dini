@@ -100,7 +100,7 @@ if __name__ == '__main__':
             data_new = np.concatenate((inp_new, out_new), axis=1)
         elif model == 'mice':
             max_iter = [1,5,10][0]
-            inp_new, out_new = IterativeImputer(max_iter=1, n_nearest_features=1, imputation_order='descending', estimator=SGDRegressor()).fit_transform(inp_c), IterativeImputer(max_iter=1, n_nearest_features=1, imputation_order='descending', estimator=SGDRegressor()).fit_transform(out_c)
+            inp_new, out_new = IterativeImputer(max_iter=1, n_nearest_features=1, imputation_order='descending', estimator=SGDRegressor(), tol=0.1).fit_transform(inp_c), IterativeImputer(max_iter=1, n_nearest_features=1, imputation_order='descending', estimator=SGDRegressor(), tol=0.1).fit_transform(out_c)
             data_new = np.concatenate((inp_new, out_new), axis=1)
         elif model == 'spectral':
             sparsity = [0.5,None,1][0]
