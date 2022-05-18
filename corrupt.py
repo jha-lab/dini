@@ -120,6 +120,9 @@ def process(dataset, corruption, fraction = 0.1):
 	elif dataset == 'naval':
 		def split(df):
 			return df.iloc[:, :-2].values, df.iloc[:, -2:].values
+	elif dataset == 'diabetes':
+		def split(df):
+			return df.iloc[:, :-7].values, df.iloc[:, -7:].values
 	elif dataset == 'accelerometer':
 		def split(df):
 			return df.iloc[:, 0:2].values, df.iloc[:, 2:].values
