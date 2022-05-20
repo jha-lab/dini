@@ -278,7 +278,7 @@ if __name__ == '__main__':
         old_loss = lf(data[data_m], data_c[data_m]).item()
 
     print('DINI MSE:\t', lf(data[data_m], data_c[data_m]).item())
-    print('DINI MSE\t', mae(data[data_m].detach().numpy(), data_c[data_m].detach().numpy()))
+    print('DINI MAE\t', mae(data[data_m].detach().numpy(), data_c[data_m].detach().numpy()))
 
     results['dini'] = [lf(data[data_m], data_c[data_m]).item(), mae(data[data_m].detach().numpy(), data_c[data_m].detach().numpy())]
 
