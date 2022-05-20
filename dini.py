@@ -36,7 +36,7 @@ def load_model(modelname, inp, out, dataset, retrain, test):
     import src.models
     model_class = getattr(src.models, modelname)
     model = model_class(inp.shape[1], out.shape[1], 128).double()
-    optimizer = torch.optim.Adam(model.parameters() , lr=0.0005, weight_decay=1e-5)
+    optimizer = torch.optim.Adam(model.parameters() , lr=0.0005, weight_decay=1e-3)
     fname = f'{checkpoints_folder}/{dataset}/{modelname}.ckpt'
     if os.path.exists(fname) and (not retrain or test):
         print(f"{color.GREEN}Loading pre-trained model: {model.name}{color.ENDC}")
@@ -61,7 +61,7 @@ def save_model(model, optimizer, epoch, accuracy_list, dataset, modelname):
         'accuracy_list': accuracy_list}, file_path)
 
 def backprop(epoch, model, optimizer, dataloader):
-    lf = nn.MSELoss(reduction = 'mean')
+    lf = lambda x, y: nn.MSELoss(reduction = 'mean')(x, y) + nn.L1Loss(reduction = 'mean')(x, y)
     ls = []
     for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
         pred_i, pred_o = model(inp, out)
@@ -71,7 +71,7 @@ def backprop(epoch, model, optimizer, dataloader):
     return np.mean(ls)
 
 def opt(model, dataloader):
-    lf = nn.MSELoss(reduction = 'mean')
+    lf = lambda x, y: nn.MSELoss(reduction = 'mean')(x, y) + nn.L1Loss(reduction = 'mean')(x, y)
     ls = []; new_inp, new_out = [], []
     for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
         # update input
