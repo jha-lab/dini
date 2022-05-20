@@ -64,7 +64,7 @@ if __name__ == '__main__':
     df = pd.read_csv(data_file, index_col=0)
     assert not np.any(np.isnan(df.values))
     df = normalize(df)
-    df = df.sample(frac=0.1) # randomize dataset
+    df = df.sample(frac=0.3) # randomize dataset
 
     df_size = df.values.shape[0]
     df_train = df.iloc[:int(0.6*df_size), :]
@@ -133,16 +133,14 @@ if __name__ == '__main__':
     train_dataloader = DataLoader(list(zip(inp_train, out_train)), batch_size=1, shuffle=False)
     for inp, out in tqdm(train_dataloader, leave=False, ncols=80):
         pred_i, pred_o = model(inp, torch.zeros_like(out))
-        pred_o = torch.round(pred_o)
-        if torch.allclose(pred_o, out): train_correct += 1
+        if torch.allclose(pred_o, out, rtol=0.1, atol=0.1): train_correct += 1
 
     # Get accuracy on test set
     test_correct = 0
     test_dataloader = DataLoader(list(zip(inp_test, out_test)), batch_size=1, shuffle=False)
     for inp, out in tqdm(test_dataloader, leave=False, ncols=80):
         pred_i, pred_o = model(inp, torch.zeros_like(out))
-        pred_o = torch.round(pred_o)
-        if torch.allclose(pred_o, out): test_correct += 1
+        if torch.allclose(pred_o, out, rtol=0.1, atol=0.1): test_correct += 1
 
     print(f'DINI Train Accuracy on CPS WDT: {train_correct/len(train_dataloader)*100 : 0.2f}%')
     print(f'DINI Test Accuracy on CPS WDT: {test_correct/len(test_dataloader)*100 : 0.2f}%')
@@ -155,7 +153,7 @@ if __name__ == '__main__':
     print(f'MEDIAN MAE:\t', mae(data[data_m], data_imp_base[data_m]))
 
     model, optimizer, epoch, accuracy_list = load_model('FCN', inp_imp_base, out_imp_base, 'cps_wdt', True, False)
-    num_epochs = 5
+    num_epochs = 20
 
     early_stop_patience, curr_patience, old_loss = 3, 0, np.inf
     for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
@@ -181,16 +179,14 @@ if __name__ == '__main__':
     train_dataloader = DataLoader(list(zip(inp_train, out_train)), batch_size=1, shuffle=False)
     for inp, out in tqdm(train_dataloader, leave=False, ncols=80):
         pred_i, pred_o = model(inp, torch.zeros_like(out))
-        pred_o = torch.round(pred_o)
-        if torch.allclose(pred_o, out): train_correct += 1
+        if torch.allclose(pred_o, out, rtol=0.1, atol=0.1): train_correct += 1
 
     # Get accuracy on test set
     test_correct = 0
     test_dataloader = DataLoader(list(zip(inp_test, out_test)), batch_size=1, shuffle=False)
     for inp, out in tqdm(test_dataloader, leave=False, ncols=80):
         pred_i, pred_o = model(inp, torch.zeros_like(out))
-        pred_o = torch.round(pred_o)
-        if torch.allclose(pred_o, out): test_correct += 1
+        if torch.allclose(pred_o, out, rtol=0.1, atol=0.1): test_correct += 1
 
     print(f'Baseline Train Accuracy on CPS WDT: {train_correct/len(train_dataloader)*100 : 0.2f}%')
     print(f'Baseline Test Accuracy on CPS WDT: {test_correct/len(test_dataloader)*100 : 0.2f}%')
