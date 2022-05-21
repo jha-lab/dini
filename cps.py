@@ -44,7 +44,7 @@ warnings.filterwarnings('ignore')
 # tqdm.__init__ = partialmethod(tqdm.__init__, disable=True)
 
 
-SAVE_HEATMAPS = False
+SAVE_HEATMAPS = True
 
 
 if __name__ == '__main__':
@@ -75,7 +75,7 @@ if __name__ == '__main__':
     df = pd.read_csv(data_file, index_col=0)
     assert not np.any(np.isnan(df.values))
     df = normalize(df)
-    df = df.sample(frac=0.05, random_state=0) # randomize dataset
+    df = df.sample(frac=0.1, random_state=0) # randomize dataset
     # df = pd.concat([df.loc[df[class_name] == 1].sample(7) for class_name in ['Label_N', 'Label_DoS', 'Label_MITM', 'Label_S', 'Label_PF']])
 
     df_size = df.values.shape[0]
@@ -169,7 +169,7 @@ if __name__ == '__main__':
     data = torch.cat([torch.cat((inp_train, inp_val)), torch.cat((out_train, out_val))], dim=1)
 
     if SAVE_HEATMAPS:
-        os.makedir('./dini_cps_wdt')
+        os.makedirs('./dini_cps_wdt', exist_ok=True)
         plt.imshow(data)
         plt.savefig('./dini_cps_wdt/dini_cps_wdt_orig.pdf')
 
@@ -260,7 +260,8 @@ if __name__ == '__main__':
     print(f'DINI Confusion Matrix:\n{confusion_matrix(y_true, y_pred, labels=np.arange(5))}')
 
     # Run simple FCN on median-imputed data
-    inp_imp_base, out_imp_base = SimpleFill(fill_method='median').fit_transform(inp_c.numpy()), SimpleFill(fill_method='median').fit_transform(out_c.numpy())
+    # inp_imp_base, out_imp_base = SimpleFill(fill_method='median').fit_transform(inp_c.numpy()), SimpleFill(fill_method='median').fit_transform(out_c.numpy())
+    inp_imp_base, out_imp_base = IterativeImputer(max_iter=1, n_nearest_features=1, imputation_order='descending', estimator=SGDRegressor(), tol=0.1).fit_transform(inp_c.numpy()), IterativeImputer(max_iter=1, n_nearest_features=1, imputation_order='descending', estimator=SGDRegressor(), tol=0.1).fit_transform(out_c.numpy())
     inp_base, out_base = torch.cat([inp_train, torch.tensor(inp_imp_base)]), torch.cat([out_train, torch.tensor(out_imp_base)])
     data_base = torch.cat([inp_base, out_base], dim=1)
 
@@ -268,11 +269,11 @@ if __name__ == '__main__':
         plt.imshow(data_base)
         plt.savefig('./dini_cps_wdt/dini_cps_wdt_med.pdf')
 
-    print(f'MEDIAN MSE:\t', mse(data[data_m], data_base[data_m]))
-    print(f'MEDIAN MAE:\t', mae(data[data_m], data_base[data_m]))
+    print(f'MICE MSE:\t', mse(data[data_m], data_base[data_m]))
+    print(f'MICE MAE:\t', mae(data[data_m], data_base[data_m]))
 
     baseline_model, optimizer, epoch, accuracy_list = load_model('FCN', inp_base, out_base, 'cps_wdt', True, False)
-    num_epochs = 5
+    num_epochs = 50
 
     early_stop_patience, curr_patience, old_loss = 3, 0, np.inf
     for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
