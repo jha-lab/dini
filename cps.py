@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 from fancyimpute import *
 from sklearn.metrics import mean_squared_error as mse
 from sklearn.metrics import mean_absolute_error as mae
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 import pandas as pd
 from tqdm import tqdm
 from copy import deepcopy
@@ -19,6 +20,7 @@ from grape import load_data as load_data_sep, init_impute as init_impute_sep, tr
 from gain import GAINGenerator, GAINDiscriminator, GAINTrainer
 from dini import load_model, save_model, backprop, opt
 from sklearn.linear_model import LinearRegression, SGDRegressor
+from torch.utils.data.dataloader import default_collate
 
 import sys
 sys.path.append('./GRAPE/')
@@ -34,13 +36,19 @@ from utils.plot_utils import plot_curve, plot_sample
 from utils.utils import build_optimizer, objectview, get_known_mask, mask_edge
 
 from matplotlib import pyplot as plt
+import multiprocessing
 
 import warnings
 from functools import partialmethod
 warnings.filterwarnings('ignore')
 # tqdm.__init__ = partialmethod(tqdm.__init__, disable=True)
 
+
+SAVE_HEATMAPS = False
+
+
 if __name__ == '__main__':
+    multiprocessing.set_start_method('spawn')
     parser = argparse.ArgumentParser(description='DINI')
     parser.add_argument('--strategy', 
                         metavar='-s', 
@@ -56,6 +64,9 @@ if __name__ == '__main__':
                         help="fraction of data to corrupt; should be less than 1")
     args = parser.parse_args()
 
+    np.random.seed(0)
+    torch.manual_seed(0)
+
     # Create train, corrupt, test splits
     dataset = 'cps_wdt'
     folder = os.path.join(output_folder, dataset)
@@ -64,9 +75,11 @@ if __name__ == '__main__':
     df = pd.read_csv(data_file, index_col=0)
     assert not np.any(np.isnan(df.values))
     df = normalize(df)
-    df = df.sample(frac=0.3) # randomize dataset
+    df = df.sample(frac=0.05, random_state=0) # randomize dataset
+    # df = pd.concat([df.loc[df[class_name] == 1].sample(7) for class_name in ['Label_N', 'Label_DoS', 'Label_MITM', 'Label_S', 'Label_PF']])
 
     df_size = df.values.shape[0]
+    print(f'Sampled dataset size: {df_size}')
     df_train = df.iloc[:int(0.6*df_size), :]
     df_val = df.iloc[int(0.6*df_size):int(0.8*df_size), :]
     df_test = df.iloc[int(0.8*df_size):, :]
@@ -85,15 +98,66 @@ if __name__ == '__main__':
     else:
         raise NotImplementedError()
 
-    inp_train, out_train = torch.tensor(df_train.values[:, :-2]), torch.tensor(df_train.values[:, -2:])
-    inp_val, out_val = torch.tensor(df_val.values[:, :-2]), torch.tensor(df_val.values[:, -2:])
-    inp_c, out_c = torch.tensor(corrupt_df.values[:, :-2]), torch.tensor(corrupt_df.values[:, -2:])
-    inp_test, out_test = torch.tensor(df_test.values[:, :-2]), torch.tensor(df_test.values[:, -2:])
+    inp_train, out_train = torch.tensor(df_train.values[:, :-5]), torch.tensor(df_train.values[:, -5:])
+    inp_val, out_val = torch.tensor(df_val.values[:, :-5]), torch.tensor(df_val.values[:, -5:])
+    inp_c, out_c = torch.tensor(corrupt_df.values[:, :-5]), torch.tensor(corrupt_df.values[:, -5:])
+    inp_test, out_test = torch.tensor(df_test.values[:, :-5]), torch.tensor(df_test.values[:, -5:])
 
-    # Run DINI
     num_epochs = 50
     lf = nn.MSELoss(reduction = 'mean')
+    unc_model, optimizer, epoch, accuracy_list = load_model('FCN', inp_train, out_train, 'cps_wdt', True, False)
 
+    # Train model on uncorrupted data
+    early_stop_patience, curr_patience, old_loss = 3, 0, np.inf
+    for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
+        # Get Data
+        dataloader = DataLoader(list(zip(torch.cat([inp_train, inp_val]), torch.cat([out_train, out_val]))), batch_size=1, shuffle=False)
+
+        # Tune Model
+        ls = []
+        for inp, out in tqdm(dataloader, leave=False, ncols=80):
+            pred_i, pred_o = unc_model(inp, out)
+            loss = lf(pred_o, out)
+            ls.append(loss.item())   
+            optimizer.zero_grad(); loss.backward(); optimizer.step()
+        
+        tqdm.write(f'Epoch {e},\tLoss = {np.mean(ls)}')
+
+        if np.mean(ls) >= old_loss: curr_patience += 1
+        if curr_patience > early_stop_patience: break
+        old_loss = np.mean(ls)
+
+    # Get accuracy on train set
+    y_pred, y_true = [], []
+    train_dataloader = DataLoader(list(zip(inp_train, out_train)), batch_size=1, shuffle=False)
+    for inp, out in tqdm(train_dataloader, leave=False, ncols=80):
+        pred_i, pred_o = unc_model(inp, torch.zeros_like(out))
+        y_pred.append(np.argmax(pred_o.detach().numpy()))
+        y_true.append(np.argmax(out))
+
+    train_accuracy = accuracy_score(y_true, y_pred)
+
+    # Get accuracy on test set
+    y_pred, y_true = [], []
+    test_dataloader = DataLoader(list(zip(inp_test, out_test)), batch_size=1, shuffle=False)
+    for inp, out in tqdm(test_dataloader, leave=False, ncols=80):
+        pred_i, pred_o = unc_model(inp, torch.zeros_like(out))
+        y_pred.append(np.argmax(pred_o.detach().numpy()))
+        y_true.append(np.argmax(out))
+
+    test_accuracy = accuracy_score(y_true, y_pred)
+    test_precision = precision_score(y_true, y_pred, average = 'micro')
+    test_recall = recall_score(y_true, y_pred, average = 'micro')
+    test_f1_score = f1_score(y_true, y_pred, average = 'micro')
+
+    print(f'Uncorrupted Train Accuracy on CPS WDT: {train_accuracy*100 : 0.2f}%')
+    print(f'Uncorrupted Test Accuracy on CPS WDT: {test_accuracy*100 : 0.2f}%')
+    print(f'Uncorrupted Precision on CPS WDT: {test_precision : 0.2f}')
+    print(f'Uncorrupted Recall on CPS WDT: {test_recall : 0.2f}')
+    print(f'Uncorrupted F1 Score on CPS WDT: {test_f1_score : 0.2f}')
+    print(f'Uncorrupted Confusion Matrix:\n{confusion_matrix(y_true, y_pred, labels=np.arange(5))}')
+
+    # Run DINI
     inp_dini, out_dini = torch.cat((inp_train, inp_c)).float(), torch.cat((out_train, out_c)).float()
     inp_m, out_m = torch.isnan(inp_dini), torch.isnan(out_dini)
     inp_m2, out_m2 = torch.logical_not(inp_m), torch.logical_not(out_m)
@@ -103,6 +167,11 @@ if __name__ == '__main__':
     data_imp = torch.cat([inp_imp, out_imp], dim=1)
     data_m = torch.cat([inp_m, out_m], dim=1)
     data = torch.cat([torch.cat((inp_train, inp_val)), torch.cat((out_train, out_val))], dim=1)
+
+    if SAVE_HEATMAPS:
+        os.makedir('./dini_cps_wdt')
+        plt.imshow(data)
+        plt.savefig('./dini_cps_wdt/dini_cps_wdt_orig.pdf')
 
     early_stop_patience, curr_patience, old_loss = 3, 0, np.inf
     for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
@@ -119,51 +188,37 @@ if __name__ == '__main__':
         freeze_model(model)
         inp_imp, out_imp = opt(model, dataloader)
         data_imp = torch.cat([inp_imp, out_imp], dim=1)
-        tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {mse(data[data_m].detach().numpy(), data_imp[data_m].detach().numpy()).item()},\tMAE = {mae(data[data_m].detach().numpy(), data_imp[data_m].detach().numpy())}')  
+        tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {mse(data[data_m].detach().numpy(), data_imp[data_m].detach().numpy())},\tMAE = {mae(data[data_m].detach().numpy(), data_imp[data_m].detach().numpy())}')  
 
         if lf(data[data_m], data_imp[data_m]).item() >= old_loss: curr_patience += 1
         if curr_patience > early_stop_patience: break
         old_loss = lf(data[data_m], data_imp[data_m]).item()
 
-    print('DINI MSE:\t', lf(data[data_m], data_imp[data_m]).item())
+        # Save imputed data heatmap
+        if e%10 == 0 and SAVE_HEATMAPS:
+            plt.imshow(data_imp)
+            plt.savefig(f'./dini_cps_wdt/dini_cps_wdt_e{e}.pdf')
+
+    out_imp = torch.nn.functional.gumbel_softmax(out_imp, hard=True)
+    data_imp[:, -5:] = torch.nn.functional.gumbel_softmax(data_imp[:, -5:], hard=True)
+    unfreeze_model(model)
+
+    print('DINI MSE:\t', mse(data[data_m].detach().numpy(), data_imp[data_m].detach().numpy()))
     print('DINI MAE\t', mae(data[data_m].detach().numpy(), data_imp[data_m].detach().numpy()))
 
-    # Get accuracy on train set
-    train_correct = 0
-    train_dataloader = DataLoader(list(zip(inp_train, out_train)), batch_size=1, shuffle=False)
-    for inp, out in tqdm(train_dataloader, leave=False, ncols=80):
-        pred_i, pred_o = model(inp, torch.zeros_like(out))
-        if torch.allclose(pred_o, out, rtol=0.1, atol=0.1): train_correct += 1
+    num_epochs = 50
+    train_model, optimizer, epoch, accuracy_list = load_model('FCN', inp_imp, out_imp, 'cps_wdt', True, False)
 
-    # Get accuracy on test set
-    test_correct = 0
-    test_dataloader = DataLoader(list(zip(inp_test, out_test)), batch_size=1, shuffle=False)
-    for inp, out in tqdm(test_dataloader, leave=False, ncols=80):
-        pred_i, pred_o = model(inp, torch.zeros_like(out))
-        if torch.allclose(pred_o, out, rtol=0.1, atol=0.1): test_correct += 1
-
-    print(f'DINI Train Accuracy on CPS WDT: {train_correct/len(train_dataloader)*100 : 0.2f}%')
-    print(f'DINI Test Accuracy on CPS WDT: {test_correct/len(test_dataloader)*100 : 0.2f}%')
-
-    # Run simple FCN on median-imputed data
-    inp_imp_base, out_imp_base = SimpleFill(fill_method='median').fit_transform(inp_c.numpy()), SimpleFill(fill_method='median').fit_transform(out_c.numpy())
-    data_imp_base = torch.cat([torch.cat([inp_train, torch.tensor(inp_imp_base)]), torch.cat([out_train, torch.tensor(out_imp_base)])], dim=1)
-
-    print(f'MEDIAN MSE:\t', mse(data[data_m], data_imp_base[data_m]))
-    print(f'MEDIAN MAE:\t', mae(data[data_m], data_imp_base[data_m]))
-
-    model, optimizer, epoch, accuracy_list = load_model('FCN', inp_imp_base, out_imp_base, 'cps_wdt', True, False)
-    num_epochs = 20
-
+    # Train model on imputed data
     early_stop_patience, curr_patience, old_loss = 3, 0, np.inf
     for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
         # Get Data
-        dataloader = DataLoader(list(zip(inp_imp_base, out_imp_base, inp_m, out_m)), batch_size=1, shuffle=False)
+        dataloader = DataLoader(list(zip(inp_imp, out_imp, inp_m, out_m)), batch_size=1, shuffle=False)
 
         # Tune Model
         ls = []
         for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
-            pred_i, pred_o = model(inp, out)
+            pred_i, pred_o = train_model(inp, out)
             loss = lf(pred_o, out)
             ls.append(loss.item())   
             optimizer.zero_grad(); loss.backward(); optimizer.step()
@@ -175,20 +230,97 @@ if __name__ == '__main__':
         old_loss = np.mean(ls)
 
     # Get accuracy on train set
-    train_correct = 0
+    y_pred, y_true = [], []
     train_dataloader = DataLoader(list(zip(inp_train, out_train)), batch_size=1, shuffle=False)
     for inp, out in tqdm(train_dataloader, leave=False, ncols=80):
-        pred_i, pred_o = model(inp, torch.zeros_like(out))
-        if torch.allclose(pred_o, out, rtol=0.1, atol=0.1): train_correct += 1
+        pred_i, pred_o = train_model(inp, torch.zeros_like(out))
+        y_pred.append(np.argmax(pred_o.detach().numpy()))
+        y_true.append(np.argmax(out))
+
+    train_accuracy = accuracy_score(y_true, y_pred)
 
     # Get accuracy on test set
-    test_correct = 0
+    y_pred, y_true = [], []
     test_dataloader = DataLoader(list(zip(inp_test, out_test)), batch_size=1, shuffle=False)
     for inp, out in tqdm(test_dataloader, leave=False, ncols=80):
-        pred_i, pred_o = model(inp, torch.zeros_like(out))
-        if torch.allclose(pred_o, out, rtol=0.1, atol=0.1): test_correct += 1
+        pred_i, pred_o = train_model(inp, torch.zeros_like(out))
+        y_pred.append(np.argmax(pred_o.detach().numpy()))
+        y_true.append(np.argmax(out))
 
-    print(f'Baseline Train Accuracy on CPS WDT: {train_correct/len(train_dataloader)*100 : 0.2f}%')
-    print(f'Baseline Test Accuracy on CPS WDT: {test_correct/len(test_dataloader)*100 : 0.2f}%')
+    test_accuracy = accuracy_score(y_true, y_pred)
+    test_precision = precision_score(y_true, y_pred, average = 'micro')
+    test_recall = recall_score(y_true, y_pred, average = 'micro')
+    test_f1_score = f1_score(y_true, y_pred, average = 'micro')
+
+    print(f'DINI Train Accuracy on CPS WDT: {train_accuracy*100 : 0.2f}%')
+    print(f'DINI Test Accuracy on CPS WDT: {test_accuracy*100 : 0.2f}%')
+    print(f'DINI Precision on CPS WDT: {test_precision : 0.2f}')
+    print(f'DINI Recall on CPS WDT: {test_recall : 0.2f}')
+    print(f'DINI F1 Score on CPS WDT: {test_f1_score : 0.2f}')
+    print(f'DINI Confusion Matrix:\n{confusion_matrix(y_true, y_pred, labels=np.arange(5))}')
+
+    # Run simple FCN on median-imputed data
+    inp_imp_base, out_imp_base = SimpleFill(fill_method='median').fit_transform(inp_c.numpy()), SimpleFill(fill_method='median').fit_transform(out_c.numpy())
+    inp_base, out_base = torch.cat([inp_train, torch.tensor(inp_imp_base)]), torch.cat([out_train, torch.tensor(out_imp_base)])
+    data_base = torch.cat([inp_base, out_base], dim=1)
+
+    if SAVE_HEATMAPS:
+        plt.imshow(data_base)
+        plt.savefig('./dini_cps_wdt/dini_cps_wdt_med.pdf')
+
+    print(f'MEDIAN MSE:\t', mse(data[data_m], data_base[data_m]))
+    print(f'MEDIAN MAE:\t', mae(data[data_m], data_base[data_m]))
+
+    baseline_model, optimizer, epoch, accuracy_list = load_model('FCN', inp_base, out_base, 'cps_wdt', True, False)
+    num_epochs = 5
+
+    early_stop_patience, curr_patience, old_loss = 3, 0, np.inf
+    for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
+        # Get Data
+        dataloader = DataLoader(list(zip(inp_base, out_base, inp_m, out_m)), batch_size=1, shuffle=False)
+
+        # Tune Model
+        ls = []
+        for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
+            pred_i, pred_o = baseline_model(inp, out)
+            loss = lf(pred_o, out)
+            ls.append(loss.item())   
+            optimizer.zero_grad(); loss.backward(); optimizer.step()
+        
+        tqdm.write(f'Epoch {e},\tLoss = {np.mean(ls)}')
+
+        if np.mean(ls) >= old_loss: curr_patience += 1
+        if curr_patience > early_stop_patience: break
+        old_loss = np.mean(ls)
+
+   # Get accuracy on train set
+    y_pred, y_true = [], []
+    train_dataloader = DataLoader(list(zip(inp_train, out_train)), batch_size=1, shuffle=False)
+    for inp, out in tqdm(train_dataloader, leave=False, ncols=80):
+        pred_i, pred_o = baseline_model(inp, torch.zeros_like(out))
+        y_pred.append(np.argmax(pred_o.detach().numpy()))
+        y_true.append(np.argmax(out))
+
+    train_accuracy = accuracy_score(y_true, y_pred)
+
+    # Get accuracy on test set
+    y_pred, y_true = [], []
+    test_dataloader = DataLoader(list(zip(inp_test, out_test)), batch_size=1, shuffle=False)
+    for inp, out in tqdm(test_dataloader, leave=False, ncols=80):
+        pred_i, pred_o = baseline_model(inp, torch.zeros_like(out))
+        y_pred.append(np.argmax(pred_o.detach().numpy()))
+        y_true.append(np.argmax(out))
+
+    test_accuracy = accuracy_score(y_true, y_pred)
+    test_precision = precision_score(y_true, y_pred, average = 'micro')
+    test_recall = recall_score(y_true, y_pred, average = 'micro')
+    test_f1_score = f1_score(y_true, y_pred, average = 'micro')
+
+    print(f'Baseline Train Accuracy on CPS WDT: {train_accuracy*100 : 0.2f}%')
+    print(f'Baseline Test Accuracy on CPS WDT: {test_accuracy*100 : 0.2f}%')
+    print(f'Baseline Precision on CPS WDT: {test_precision : 0.2f}')
+    print(f'Baseline Recall on CPS WDT: {test_recall : 0.2f}')
+    print(f'Baseline F1 Score on CPS WDT: {test_f1_score : 0.2f}')
+    print(f'Baseline Confusion Matrix:\n{confusion_matrix(y_true, y_pred, labels=np.arange(5))}')
 
 
