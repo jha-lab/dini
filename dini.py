@@ -62,6 +62,7 @@ def save_model(model, optimizer, epoch, accuracy_list, dataset, modelname):
 
 def backprop(epoch, model, optimizer, dataloader):
     lf = lambda x, y: nn.MSELoss(reduction = 'mean')(x, y) + nn.L1Loss(reduction = 'mean')(x, y)
+    lfo = nn.CrossEntropyLoss(reduction = 'mean')
     ls = []
     for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
         pred_i, pred_o = model(inp, out)
@@ -72,6 +73,7 @@ def backprop(epoch, model, optimizer, dataloader):
 
 def opt(model, dataloader):
     lf = lambda x, y: nn.MSELoss(reduction = 'mean')(x, y) + nn.L1Loss(reduction = 'mean')(x, y)
+    lfo = nn.CrossEntropyLoss(reduction = 'mean')
     ls = []; new_inp, new_out = [], []
     for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
         # update input
