@@ -39,6 +39,6 @@ class FCN2(nn.Module):
         )
 
     def forward(self, inp, out):
-        out2 = self.fcn(inp)
-        inp2 = self.fcn_reverse(out)
+        out2 = 2 * self.fcn(inp) - 0.5
+        inp2 = 2 * self.fcn_reverse(out) - 0.5
         return inp2, out2
