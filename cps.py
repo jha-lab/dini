@@ -173,6 +173,8 @@ if __name__ == '__main__':
         plt.imshow(data)
         plt.savefig('./dini_cps_wdt/dini_cps_wdt_orig.pdf')
 
+    num_epochs = 100
+
     early_stop_patience, curr_patience, old_loss = 3, 0, np.inf
     for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
         # Get Data
@@ -267,7 +269,7 @@ if __name__ == '__main__':
 
     if SAVE_HEATMAPS:
         plt.imshow(data_base)
-        plt.savefig('./dini_cps_wdt/dini_cps_wdt_med.pdf')
+        plt.savefig('./dini_cps_wdt/dini_cps_wdt_mice.pdf')
 
     print(f'MICE MSE:\t', mse(data[data_m], data_base[data_m]))
     print(f'MICE MAE:\t', mae(data[data_m], data_base[data_m]))
