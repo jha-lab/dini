@@ -44,7 +44,7 @@ warnings.filterwarnings('ignore')
 # tqdm.__init__ = partialmethod(tqdm.__init__, disable=True)
 
 
-SAVE_HEATMAPS = True
+SAVE_RESULTS = True
 
 
 if __name__ == '__main__':
@@ -75,13 +75,13 @@ if __name__ == '__main__':
     df = pd.read_csv(data_file, index_col=0)
     assert not np.any(np.isnan(df.values))
     df = normalize(df)
-    df = df.sample(frac=0.1, random_state=0) # randomize dataset
+    df = df.sample(frac=0.5, random_state=0) # randomize dataset
     # df = pd.concat([df.loc[df[class_name] == 1].sample(7) for class_name in ['Label_N', 'Label_DoS', 'Label_MITM', 'Label_S', 'Label_PF']])
 
     df_size = df.values.shape[0]
     print(f'Sampled dataset size: {df_size}')
-    df_train = df.iloc[:int(0.6*df_size), :]
-    df_val = df.iloc[int(0.6*df_size):int(0.8*df_size), :]
+    df_train = df.iloc[:int(0.4*df_size), :]
+    df_val = df.iloc[int(0.4*df_size):int(0.8*df_size), :]
     df_test = df.iloc[int(0.8*df_size):, :]
 
     corruption, fraction = args.strategy, args.fraction
@@ -157,6 +157,13 @@ if __name__ == '__main__':
     print(f'Uncorrupted F1 Score on CPS WDT: {test_f1_score : 0.2f}')
     print(f'Uncorrupted Confusion Matrix:\n{confusion_matrix(y_true, y_pred, labels=np.arange(5))}')
 
+    results = {'uncorrupted': {'test_acc': test_accuracy*100, 'f1': test_f1_score}}
+
+    if SAVE_RESULTS:
+        os.makedirs('./results/cps/cms/', exist_ok=True)
+        plt.imshow(confusion_matrix(y_true, y_pred, labels=np.arange(5)))
+        plt.savefig('./results/cps/cms/unc.pdf', bbox_inches='tight')
+
     # Run DINI
     inp_dini, out_dini = torch.cat((inp_train, inp_c)).float(), torch.cat((out_train, out_c)).float()
     inp_m, out_m = torch.isnan(inp_dini), torch.isnan(out_dini)
@@ -168,17 +175,17 @@ if __name__ == '__main__':
     data_m = torch.cat([inp_m, out_m], dim=1)
     data = torch.cat([torch.cat((inp_train, inp_val)), torch.cat((out_train, out_val))], dim=1)
 
-    if SAVE_HEATMAPS:
-        os.makedirs('./dini_cps_wdt', exist_ok=True)
+    if SAVE_RESULTS:
+        os.makedirs('./results/cps/heatmaps/', exist_ok=True)
         plt.imshow(data)
-        plt.savefig('./dini_cps_wdt/dini_cps_wdt_orig.pdf')
+        plt.savefig('./results/cps/heatmaps/orig.pdf', bbox_inches='tight')
 
-    num_epochs = 100
+    num_epochs = 300
 
     early_stop_patience, curr_patience, old_loss = 3, 0, np.inf
     for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
         # Get Data
-        dataloader = DataLoader(list(zip(inp_imp, out_imp, inp_m, out_m)), batch_size=1, shuffle=False)
+        dataloader = DataLoader(list(zip(inp_imp, out_imp, inp_m, out_m)), batch_size=64, shuffle=False)
 
         # Tune Model
         unfreeze_model(model)
@@ -197,9 +204,9 @@ if __name__ == '__main__':
         old_loss = lf(data[data_m], data_imp[data_m]).item()
 
         # Save imputed data heatmap
-        if e%10 == 0 and SAVE_HEATMAPS:
+        if e%10 == 0 and SAVE_RESULTS:
             plt.imshow(data_imp)
-            plt.savefig(f'./dini_cps_wdt/dini_cps_wdt_e{e}.pdf')
+            plt.savefig(f'./results/cps/heatmaps/dini_e{e}.pdf', bbox_inches='tight')
 
     out_imp = torch.nn.functional.gumbel_softmax(out_imp, hard=True)
     data_imp[:, -5:] = torch.nn.functional.gumbel_softmax(data_imp[:, -5:], hard=True)
@@ -261,20 +268,26 @@ if __name__ == '__main__':
     print(f'DINI F1 Score on CPS WDT: {test_f1_score : 0.2f}')
     print(f'DINI Confusion Matrix:\n{confusion_matrix(y_true, y_pred, labels=np.arange(5))}')
 
-    # Run simple FCN on median-imputed data
+    results['dini'] = {'test_acc': test_accuracy*100, 'f1': test_f1_score}
+
+    if SAVE_RESULTS:
+        plt.imshow(confusion_matrix(y_true, y_pred, labels=np.arange(5)))
+        plt.savefig('./results/cps/cms/dini.pdf', bbox_inches='tight')
+
+    # Run simple FCN on MICE-imputed data
     # inp_imp_base, out_imp_base = SimpleFill(fill_method='median').fit_transform(inp_c.numpy()), SimpleFill(fill_method='median').fit_transform(out_c.numpy())
     inp_imp_base, out_imp_base = IterativeImputer(max_iter=1, n_nearest_features=1, imputation_order='descending', estimator=SGDRegressor(), tol=0.1).fit_transform(inp_c.numpy()), IterativeImputer(max_iter=1, n_nearest_features=1, imputation_order='descending', estimator=SGDRegressor(), tol=0.1).fit_transform(out_c.numpy())
     inp_base, out_base = torch.cat([inp_train, torch.tensor(inp_imp_base)]), torch.cat([out_train, torch.tensor(out_imp_base)])
     data_base = torch.cat([inp_base, out_base], dim=1)
 
-    if SAVE_HEATMAPS:
+    if SAVE_RESULTS:
         plt.imshow(data_base)
-        plt.savefig('./dini_cps_wdt/dini_cps_wdt_mice.pdf')
+        plt.savefig('./results/cps/heatmaps/mice.pdf', bbox_inches='tight')
 
     print(f'MICE MSE:\t', mse(data[data_m], data_base[data_m]))
     print(f'MICE MAE:\t', mae(data[data_m], data_base[data_m]))
 
-    baseline_model, optimizer, epoch, accuracy_list = load_model('FCN', inp_base, out_base, 'cps_wdt', True, False)
+    mice_model, optimizer, epoch, accuracy_list = load_model('FCN', inp_base, out_base, 'cps_wdt', True, False)
     num_epochs = 50
 
     early_stop_patience, curr_patience, old_loss = 3, 0, np.inf
@@ -285,6 +298,65 @@ if __name__ == '__main__':
         # Tune Model
         ls = []
         for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
+            pred_i, pred_o = mice_model(inp, out)
+            loss = lf(pred_o, out)
+            ls.append(loss.item())   
+            optimizer.zero_grad(); loss.backward(); optimizer.step()
+        
+        tqdm.write(f'Epoch {e},\tLoss = {np.mean(ls)}')
+
+        if np.mean(ls) >= old_loss: curr_patience += 1
+        if curr_patience > early_stop_patience: break
+        old_loss = np.mean(ls)
+
+   # Get accuracy on train set
+    y_pred, y_true = [], []
+    train_dataloader = DataLoader(list(zip(inp_train, out_train)), batch_size=1, shuffle=False)
+    for inp, out in tqdm(train_dataloader, leave=False, ncols=80):
+        pred_i, pred_o = mice_model(inp, torch.zeros_like(out))
+        y_pred.append(np.argmax(pred_o.detach().numpy()))
+        y_true.append(np.argmax(out))
+
+    train_accuracy = accuracy_score(y_true, y_pred)
+
+    # Get accuracy on test set
+    y_pred, y_true = [], []
+    test_dataloader = DataLoader(list(zip(inp_test, out_test)), batch_size=1, shuffle=False)
+    for inp, out in tqdm(test_dataloader, leave=False, ncols=80):
+        pred_i, pred_o = mice_model(inp, torch.zeros_like(out))
+        y_pred.append(np.argmax(pred_o.detach().numpy()))
+        y_true.append(np.argmax(out))
+
+    test_accuracy = accuracy_score(y_true, y_pred)
+    test_precision = precision_score(y_true, y_pred, average = 'micro')
+    test_recall = recall_score(y_true, y_pred, average = 'micro')
+    test_f1_score = f1_score(y_true, y_pred, average = 'micro')
+
+    print(f'MICE Train Accuracy on CPS WDT: {train_accuracy*100 : 0.2f}%')
+    print(f'MICE Test Accuracy on CPS WDT: {test_accuracy*100 : 0.2f}%')
+    print(f'MICE Precision on CPS WDT: {test_precision : 0.2f}')
+    print(f'MICE Recall on CPS WDT: {test_recall : 0.2f}')
+    print(f'MICE F1 Score on CPS WDT: {test_f1_score : 0.2f}')
+    print(f'MICE Confusion Matrix:\n{confusion_matrix(y_true, y_pred, labels=np.arange(5))}')
+
+    results['mice'] = {'test_acc': test_accuracy*100, 'f1': test_f1_score}
+
+    if SAVE_RESULTS:
+        plt.imshow(confusion_matrix(y_true, y_pred, labels=np.arange(5)))
+        plt.savefig('./results/cps/cms/mice.pdf', bbox_inches='tight')
+
+    # Train a model only on the uncorrupted dataset
+    baseline_model, optimizer, epoch, accuracy_list = load_model('FCN', inp_train, out_train, 'cps_wdt', True, False)
+    num_epochs = 50
+
+    early_stop_patience, curr_patience, old_loss = 3, 0, np.inf
+    for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
+        # Get Data
+        dataloader = DataLoader(list(zip(inp_train, out_train)), batch_size=1, shuffle=False)
+
+        # Tune Model
+        ls = []
+        for inp, out in tqdm(dataloader, leave=False, ncols=80):
             pred_i, pred_o = baseline_model(inp, out)
             loss = lf(pred_o, out)
             ls.append(loss.item())   
@@ -325,5 +397,28 @@ if __name__ == '__main__':
     print(f'Baseline Recall on CPS WDT: {test_recall : 0.2f}')
     print(f'Baseline F1 Score on CPS WDT: {test_f1_score : 0.2f}')
     print(f'Baseline Confusion Matrix:\n{confusion_matrix(y_true, y_pred, labels=np.arange(5))}')
+
+    # results['baseline'] = {'test_acc': test_accuracy*100, 'f1': test_f1_score}
+
+    if SAVE_RESULTS:
+        plt.imshow(confusion_matrix(y_true, y_pred, labels=np.arange(5)))
+        plt.savefig('./results/cps/cms/baseline.pdf', bbox_inches='tight')
+
+    # Plot results
+    fig, ax = plt.subplots()
+    x = np.arange(len(results))
+    width = 0.4
+    ax2 = ax.twinx()
+
+    # ax.bar(x, [results[key][0] for key in results.keys()], color='#4292C6', label='MSE')
+    ax.bar(x - width*0.5, [results[key]['test_acc'] for key in results.keys()], width, color='#F1C40F', label='Test Accuracy')
+    ax2 .bar(x + width*0.5, [results[key]['f1'] for key in results.keys()], width, color='#E67E22', label='F1 Score')
+    ax.set_ylabel('Test Accuracy (%)')
+    ax2.set_ylabel('F1 Score')
+    ax.set_xticks(x)
+    ax.set_xticklabels(['Uncorrupted', 'DINI', 'MICE'])
+    plt.title(f'Dataset: CPS WDT | Corruption strategy: {args.strategy.upper()}')
+    plt.grid(axis='y', linestyle='--')
+    plt.savefig(f'./results/cps/barplot.pdf', bbox_inches='tight')
 
 
