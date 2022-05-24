@@ -35,7 +35,7 @@ def init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero'):
 def load_model(modelname, inp, out, dataset, retrain, test):
     import src.models
     model_class = getattr(src.models, modelname)
-    model = model_class(inp.shape[1], out.shape[1], 128).double()
+    model = model_class(inp.shape[1], out.shape[1], 512).double()
     optimizer = torch.optim.Adam(model.parameters() , lr=0.0005, weight_decay=1e-3)
     fname = f'{checkpoints_folder}/{dataset}/{modelname}.ckpt'
     if os.path.exists(fname) and (not retrain or test):
