@@ -282,7 +282,7 @@ if __name__ == '__main__':
 
     results['dini'] = [lf(data[data_m], data_c[data_m]).item(), mae(data[data_m].detach().numpy(), data_c[data_m].detach().numpy())]
 
-    os.makedirs('./results/imputation/', exist_ok=True)
+    os.makedirs('./results/impute/', exist_ok=True)
     df = pd.DataFrame(results)
     df.index = ['mse', 'mae']
 
@@ -302,5 +302,5 @@ if __name__ == '__main__':
     ax.legend(loc='upper right')
     plt.title(f'Dataset: {args.dataset.upper()} | Corruption strategy: {args.strategy.upper()} | Fraction: {args.fraction}')
     plt.grid(axis='y', linestyle='--')
-    plt.savefig(f'./results/imputation/{args.dataset.lower()}_{args.strategy.lower()}_p{fraction_str}.pdf', bbox_inches='tight')
+    plt.savefig(f'./results/impute/{args.dataset.lower()}_{args.strategy.lower()}_p{fraction_str}.pdf', bbox_inches='tight')
 
