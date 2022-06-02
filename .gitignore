@@ -4,6 +4,8 @@ __pycache__/
 *$py.class
 processed/
 temp/
+data/gas/ethylene_CO.txt
+data/gas/ethylene_methane.txt
 .DS_Store
 Icon?
 ![iI]con[_a-zA-Z0-9]
