@@ -60,18 +60,18 @@ def save_model(model, optimizer, epoch, accuracy_list, dataset, modelname):
         'optimizer_state_dict': optimizer.state_dict(),
         'accuracy_list': accuracy_list}, file_path)
 
-def backprop(epoch, model, optimizer, dataloader):
+def backprop(epoch, model, optimizer, dataloader, use_ce=False):
     lf = lambda x, y: nn.MSELoss(reduction = 'mean')(x, y) + nn.L1Loss(reduction = 'mean')(x, y)
     lfo = nn.CrossEntropyLoss(reduction = 'mean')
     ls = []
     for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
         pred_i, pred_o = model(inp, out)
-        loss = lf(pred_o, out) + lf(pred_i, inp)
+        loss = lf(pred_i, inp) + (lfo(pred_o, out) if use_ce else lf(pred_o, out))
         ls.append(loss.item())   
         optimizer.zero_grad(); loss.backward(); optimizer.step()
     return np.mean(ls)
 
-def opt(model, dataloader):
+def opt(model, dataloader, use_ce=False):
     lf = lambda x, y: nn.MSELoss(reduction = 'mean')(x, y) + nn.L1Loss(reduction = 'mean')(x, y)
     lfo = nn.CrossEntropyLoss(reduction = 'mean')
     ls = []; new_inp, new_out = [], []
@@ -85,7 +85,7 @@ def opt(model, dataloader):
         while iteration < 800:
             inp_old = deepcopy(inp.data); out_old = deepcopy(out.data)
             pred_i, pred_o = model(inp, out)
-            z = lf(pred_o, out) + lf(pred_i, inp)
+            z =  lf(pred_i, inp) + (lfo(pred_o, out) if use_ce else lf(pred_o, out))
             optimizer.zero_grad(); z.backward(); optimizer.step(); scheduler.step()
             inp.data, out.data = scale(inp.data), scale(out.data)
             inp.data, out.data = mask(inp.data.detach(), inp_m, inp_orig), mask(out.data.detach(), out_m, out_orig)
