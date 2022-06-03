@@ -6,6 +6,7 @@ processed/
 temp/
 data/gas/ethylene_CO.txt
 data/gas/ethylene_methane.txt
+data/swat/SWaT_Dataset_Attack_v0.csv
 .DS_Store
 Icon?
 ![iI]con[_a-zA-Z0-9]
