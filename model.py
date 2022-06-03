@@ -90,8 +90,11 @@ if __name__ == '__main__':
         if dataset == 'cps_wdt':
             df = pd.concat([df.loc[df[class_name] == 1].sample(7) for class_name in ['Label_N', 'Label_DoS', 'Label_MITM', 'Label_S', 'Label_PF']])
         elif dataset == 'gas':
-            df = pd.concat([df.loc[df['Gas'] == i].sample(500) for i in [0, 1]])
-            df = df.sample(frac=1)
+            df = pd.concat([df.loc[df['Gas'] == i].sample(500, random_state=0) for i in [0, 1]])
+            df = df.sample(frac=1, random_state=0)
+        elif dataset == 'swat':
+            df = pd.concat([df.loc[df['Normal/Attack'] == i].sample(100, random_state=0) for i in [0, 1]])
+            df = df.sample(frac=1, random_state=0)
     else:
         df = df.sample(frac=0.01, random_state=0) # randomize dataset
 
@@ -121,13 +124,15 @@ if __name__ == '__main__':
         label_idx = -5
     elif dataset == 'gas':
         label_idx = -1
+    elif dataset == 'swat':
+        label_idx = -1
 
     inp_train, out_train = torch.tensor(df_train.values[:, :label_idx]), torch.tensor(df_train.values[:, label_idx:])
     inp_val, out_val = torch.tensor(df_val.values[:, :label_idx]), torch.tensor(df_val.values[:, label_idx:])
     inp_c, out_c = torch.tensor(corrupt_df.values[:, :label_idx]), torch.tensor(corrupt_df.values[:, label_idx:])
     inp_test, out_test = torch.tensor(df_test.values[:, :label_idx]), torch.tensor(df_test.values[:, label_idx:])
 
-    num_epochs = 5
+    num_epochs = 50
     lf = nn.MSELoss(reduction = 'mean')
     unc_model, optimizer, epoch, accuracy_list = load_model('FCN', inp_train, out_train, dataset, True, False)
 
