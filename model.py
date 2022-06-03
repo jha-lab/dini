@@ -3,9 +3,11 @@ from src.folderconstants import *
 from src.models import *
 import argparse
 import torch
+import shutil
 import numpy as np
 from torch.utils.data import DataLoader
 from fancyimpute import *
+from collections import Counter
 from sklearn.metrics import mean_squared_error as mse
 from sklearn.metrics import mean_absolute_error as mae
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
@@ -36,6 +38,7 @@ from utils.plot_utils import plot_curve, plot_sample
 from utils.utils import build_optimizer, objectview, get_known_mask, mask_edge
 
 from matplotlib import pyplot as plt
+from matplotlib.ticker import MaxNLocator
 import multiprocessing
 
 import warnings
@@ -45,6 +48,7 @@ warnings.filterwarnings('ignore')
 
 
 SAVE_RESULTS = True
+UNIFORM_SAMPLING = True
 
 
 if __name__ == '__main__':
@@ -60,7 +64,7 @@ if __name__ == '__main__':
                         metavar='-s', 
                         type=str, 
                         required=False,
-                        default='MSAR',
+                        default='MPAR',
                         help="corruption strategy from ['MCAR', 'MAR', 'MNAR', 'MPAR', 'MSAR']")
     parser.add_argument('--fraction',
                         metavar='-f',
@@ -81,7 +85,15 @@ if __name__ == '__main__':
     df = pd.read_csv(data_file, index_col=0)
     assert not np.any(np.isnan(df.values))
     df = normalize(df)
-    df = df.sample(frac=0.1, random_state=0) # randomize dataset
+
+    if UNIFORM_SAMPLING:
+        if dataset == 'cps_wdt':
+            df = pd.concat([df.loc[df[class_name] == 1].sample(7) for class_name in ['Label_N', 'Label_DoS', 'Label_MITM', 'Label_S', 'Label_PF']])
+        elif dataset == 'gas':
+            df = pd.concat([df.loc[df['Gas'] == i].sample(500) for i in [0, 1]])
+            df = df.sample(frac=1)
+    else:
+        df = df.sample(frac=0.01, random_state=0) # randomize dataset
 
     df_size = df.values.shape[0]
     print(f'Sampled dataset size: {df_size}')
@@ -115,9 +127,11 @@ if __name__ == '__main__':
     inp_c, out_c = torch.tensor(corrupt_df.values[:, :label_idx]), torch.tensor(corrupt_df.values[:, label_idx:])
     inp_test, out_test = torch.tensor(df_test.values[:, :label_idx]), torch.tensor(df_test.values[:, label_idx:])
 
-    num_epochs = 50
+    num_epochs = 5
     lf = nn.MSELoss(reduction = 'mean')
     unc_model, optimizer, epoch, accuracy_list = load_model('FCN', inp_train, out_train, dataset, True, False)
+
+    if SAVE_RESULTS and os.path.exists(f'./results/model/{dataset}/'): shutil.rmtree(f'./results/model/{dataset}')
 
     # Train model on uncorrupted data
     early_stop_patience, curr_patience, old_loss = 3, 0, np.inf
@@ -144,8 +158,12 @@ if __name__ == '__main__':
     train_dataloader = DataLoader(list(zip(inp_train, out_train)), batch_size=1, shuffle=False)
     for inp, out in tqdm(train_dataloader, leave=False, ncols=80):
         pred_i, pred_o = unc_model(inp, torch.zeros_like(out))
-        y_pred.append(np.argmax(pred_o.detach().numpy()))
-        y_true.append(np.argmax(out))
+        if out.shape[1] > 1:
+            y_pred.append(np.argmax(pred_o.detach().numpy()))
+            y_true.append(np.argmax(out))
+        else:
+            y_pred.append(int(np.around(pred_o.detach().numpy())))
+            y_true.append(int(out))
 
     train_accuracy = accuracy_score(y_true, y_pred)
 
@@ -154,8 +172,12 @@ if __name__ == '__main__':
     test_dataloader = DataLoader(list(zip(inp_test, out_test)), batch_size=1, shuffle=False)
     for inp, out in tqdm(test_dataloader, leave=False, ncols=80):
         pred_i, pred_o = unc_model(inp, torch.zeros_like(out))
-        y_pred.append(np.argmax(pred_o.detach().numpy()))
-        y_true.append(np.argmax(out))
+        if out.shape[1] > 1:
+            y_pred.append(np.argmax(pred_o.detach().numpy()))
+            y_true.append(np.argmax(out))
+        else:
+            y_pred.append(int(np.around(pred_o.detach().numpy())))
+            y_true.append(int(out))
 
     test_accuracy = accuracy_score(y_true, y_pred)
     test_precision = precision_score(y_true, y_pred, average = 'micro')
@@ -173,6 +195,9 @@ if __name__ == '__main__':
 
     if SAVE_RESULTS:
         os.makedirs(f'./results/model/{dataset}/cms/', exist_ok=True)
+        ax = plt.figure().gca()
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
         plt.imshow(confusion_matrix(y_true, y_pred, labels=np.arange(-1*label_idx if label_idx < -1 else -1*label_idx + 1)))
         plt.savefig(f'./results/model/{dataset}/cms/unc.pdf', bbox_inches='tight')
 
@@ -220,7 +245,7 @@ if __name__ == '__main__':
             plt.imshow(data_imp)
             plt.savefig(f'./results/model/{dataset}/heatmaps/dini_e{e}.pdf', bbox_inches='tight')
 
-    out_imp = torch.nn.functional.gumbel_softmax(out_imp, hard=True)
+    if out_imp.shape[1] > 1: out_imp = torch.nn.functional.gumbel_softmax(out_imp, hard=True)
     data_imp[:, label_idx:] = torch.nn.functional.gumbel_softmax(data_imp[:, label_idx:], hard=True)
     unfreeze_model(model)
 
@@ -255,8 +280,12 @@ if __name__ == '__main__':
     train_dataloader = DataLoader(list(zip(inp_train, out_train)), batch_size=1, shuffle=False)
     for inp, out in tqdm(train_dataloader, leave=False, ncols=80):
         pred_i, pred_o = train_model(inp, torch.zeros_like(out))
-        y_pred.append(np.argmax(pred_o.detach().numpy()))
-        y_true.append(np.argmax(out))
+        if out.shape[1] > 1:
+            y_pred.append(np.argmax(pred_o.detach().numpy()))
+            y_true.append(np.argmax(out))
+        else:
+            y_pred.append(int(np.around(pred_o.detach().numpy())))
+            y_true.append(int(out))
 
     train_accuracy = accuracy_score(y_true, y_pred)
 
@@ -265,8 +294,12 @@ if __name__ == '__main__':
     test_dataloader = DataLoader(list(zip(inp_test, out_test)), batch_size=1, shuffle=False)
     for inp, out in tqdm(test_dataloader, leave=False, ncols=80):
         pred_i, pred_o = train_model(inp, torch.zeros_like(out))
-        y_pred.append(np.argmax(pred_o.detach().numpy()))
-        y_true.append(np.argmax(out))
+        if out.shape[1] > 1:
+            y_pred.append(np.argmax(pred_o.detach().numpy()))
+            y_true.append(np.argmax(out))
+        else:
+            y_pred.append(int(np.around(pred_o.detach().numpy())))
+            y_true.append(int(out))
 
     test_accuracy = accuracy_score(y_true, y_pred)
     test_precision = precision_score(y_true, y_pred, average = 'micro')
@@ -283,6 +316,9 @@ if __name__ == '__main__':
     results['dini'] = {'test_acc': test_accuracy*100, 'f1': test_f1_score}
 
     if SAVE_RESULTS:
+        ax = plt.figure().gca()
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
         plt.imshow(confusion_matrix(y_true, y_pred, labels=np.arange(-1*label_idx if label_idx < -1 else -1*label_idx + 1)))
         plt.savefig(f'./results/model/{dataset}/cms/dini.pdf', bbox_inches='tight')
 
@@ -326,8 +362,12 @@ if __name__ == '__main__':
     train_dataloader = DataLoader(list(zip(inp_train, out_train)), batch_size=1, shuffle=False)
     for inp, out in tqdm(train_dataloader, leave=False, ncols=80):
         pred_i, pred_o = mice_model(inp, torch.zeros_like(out))
-        y_pred.append(np.argmax(pred_o.detach().numpy()))
-        y_true.append(np.argmax(out))
+        if out.shape[1] > 1:
+            y_pred.append(np.argmax(pred_o.detach().numpy()))
+            y_true.append(np.argmax(out))
+        else:
+            y_pred.append(int(np.around(pred_o.detach().numpy())))
+            y_true.append(int(out))
 
     train_accuracy = accuracy_score(y_true, y_pred)
 
@@ -336,8 +376,12 @@ if __name__ == '__main__':
     test_dataloader = DataLoader(list(zip(inp_test, out_test)), batch_size=1, shuffle=False)
     for inp, out in tqdm(test_dataloader, leave=False, ncols=80):
         pred_i, pred_o = mice_model(inp, torch.zeros_like(out))
-        y_pred.append(np.argmax(pred_o.detach().numpy()))
-        y_true.append(np.argmax(out))
+        if out.shape[1] > 1:
+            y_pred.append(np.argmax(pred_o.detach().numpy()))
+            y_true.append(np.argmax(out))
+        else:
+            y_pred.append(int(np.around(pred_o.detach().numpy())))
+            y_true.append(int(out))
 
     test_accuracy = accuracy_score(y_true, y_pred)
     test_precision = precision_score(y_true, y_pred, average = 'micro')
@@ -354,6 +398,9 @@ if __name__ == '__main__':
     results['mice'] = {'test_acc': test_accuracy*100, 'f1': test_f1_score}
 
     if SAVE_RESULTS:
+        ax = plt.figure().gca()
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
         plt.imshow(confusion_matrix(y_true, y_pred, labels=np.arange(-1*label_idx if label_idx < -1 else -1*label_idx + 1)))
         plt.savefig(f'./results/model/{dataset}/cms/mice.pdf', bbox_inches='tight')
 
@@ -395,8 +442,12 @@ if __name__ == '__main__':
     test_dataloader = DataLoader(list(zip(inp_test, out_test)), batch_size=1, shuffle=False)
     for inp, out in tqdm(test_dataloader, leave=False, ncols=80):
         pred_i, pred_o = baseline_model(inp, torch.zeros_like(out))
-        y_pred.append(np.argmax(pred_o.detach().numpy()))
-        y_true.append(np.argmax(out))
+        if out.shape[1] > 1:
+            y_pred.append(np.argmax(pred_o.detach().numpy()))
+            y_true.append(np.argmax(out))
+        else:
+            y_pred.append(int(np.around(pred_o.detach().numpy())))
+            y_true.append(int(out))
 
     test_accuracy = accuracy_score(y_true, y_pred)
     test_precision = precision_score(y_true, y_pred, average = 'micro')
@@ -413,6 +464,9 @@ if __name__ == '__main__':
     # results['baseline'] = {'test_acc': test_accuracy*100, 'f1': test_f1_score}
 
     if SAVE_RESULTS:
+        ax = plt.figure().gca()
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
         plt.imshow(confusion_matrix(y_true, y_pred, labels=np.arange(-1*label_idx if label_idx < -1 else -1*label_idx + 1)))
         plt.savefig(f'./results/model/{dataset}/cms/baseline.pdf', bbox_inches='tight')
 
@@ -423,12 +477,12 @@ if __name__ == '__main__':
     ax2 = ax.twinx()
 
     # ax.bar(x, [results[key][0] for key in results.keys()], color='#4292C6', label='MSE')
-    ax.bar(x - width*0.5, [results[key]['test_acc'] for key in results.keys()], width, color='#F1C40F', label='Test Accuracy')
-    ax2 .bar(x + width*0.5, [results[key]['f1'] for key in results.keys()], width, color='#E67E22', label='F1 Score')
+    ax.bar(x - width*0.5, [results[key]['test_acc'] for key in ['uncorrupted', 'mice', 'dini']], width, color='#F1C40F', label='Test Accuracy')
+    ax2 .bar(x + width*0.5, [results[key]['f1'] for key in ['uncorrupted', 'mice', 'dini']], width, color='#E67E22', label='F1 Score')
     ax.set_ylabel('Test Accuracy (%)')
     ax2.set_ylabel('F1 Score')
     ax.set_xticks(x)
-    ax.set_xticklabels(['Uncorrupted', 'DINI', 'MICE'])
+    ax.set_xticklabels(['Uncorrupted', 'MICE', 'DINI'])
     plt.title(f'Dataset: {dataset.upper()} | Corruption strategy: {args.strategy.upper()}')
     plt.grid(axis='y', linestyle='--')
     plt.savefig(f'./results/model/{dataset}/barplot.pdf', bbox_inches='tight')
