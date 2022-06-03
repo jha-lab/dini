@@ -12,7 +12,7 @@ class FCN(nn.Module):
         self.n_out = out_size
         self.fcn = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(self.n_inp, self.n_hidden), nn.ReLU(True),
+            nn.Linear(self.n_inp, self.n_hidden), nn.LeakyReLU(True),
             nn.Linear(self.n_hidden, self.n_out), nn.Sigmoid(),
         )
 
