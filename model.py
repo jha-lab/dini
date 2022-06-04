@@ -135,6 +135,10 @@ if __name__ == '__main__':
 
     num_epochs = 50
     lf = nn.MSELoss(reduction = 'mean')
+    if label_idx == -1:
+        lfo = nn.BCELoss(reduction = 'mean')
+    else:
+        lfo = nn.CrossEntropyLoss(reduction = 'mean')
     unc_model, optimizer, epoch, accuracy_list = load_model('FCN', inp_train, out_train, dataset, True, False)
 
     if SAVE_RESULTS and os.path.exists(f'./results/model/{dataset}/'): shutil.rmtree(f'./results/model/{dataset}')
@@ -149,7 +153,7 @@ if __name__ == '__main__':
         ls = []
         for inp, out in tqdm(dataloader, leave=False, ncols=80):
             pred_i, pred_o = unc_model(inp, out)
-            loss = lf(pred_o, out)
+            loss = lfo(pred_o, out)
             ls.append(loss.item())   
             optimizer.zero_grad(); loss.backward(); optimizer.step()
         
@@ -271,7 +275,7 @@ if __name__ == '__main__':
         ls = []
         for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
             pred_i, pred_o = train_model(inp, out)
-            loss = lf(pred_o, out)
+            loss = lfo(pred_o, out)
             ls.append(loss.item())   
             optimizer.zero_grad(); loss.backward(); optimizer.step()
         
@@ -357,7 +361,7 @@ if __name__ == '__main__':
             ls = []
             for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
                 pred_i, pred_o = baseline_model(inp, out)
-                loss = lf(pred_o, out)
+                loss = lfo(pred_o, out)
                 ls.append(loss.item())   
                 optimizer.zero_grad(); loss.backward(); optimizer.step()
             
@@ -427,7 +431,7 @@ if __name__ == '__main__':
    #      ls = []
    #      for inp, out in tqdm(dataloader, leave=False, ncols=80):
    #          pred_i, pred_o = baseline_model(inp, out)
-   #          loss = lf(pred_o, out)
+   #          loss = lfo(pred_o, out)
    #          ls.append(loss.item())   
    #          optimizer.zero_grad(); loss.backward(); optimizer.step()
         
