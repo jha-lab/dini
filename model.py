@@ -18,6 +18,7 @@ from corrupt import process as corrupt_process, MCAR, MAR, MNAR, MPAR, MSAR, nor
 from baseline import load_data as load_data_all, init_impute as init_impute_all
 from gmm import correct_subset, opt as gmm_opt
 from sklearn.mixture import GaussianMixture
+from impute import impute
 from grape import load_data as load_data_sep, init_impute as init_impute_sep, train_gnn_mdi
 from gain import GAINGenerator, GAINDiscriminator, GAINTrainer
 from dini import load_model, save_model, backprop, opt
@@ -207,7 +208,7 @@ if __name__ == '__main__':
         plt.savefig(f'./results/model/{dataset}/cms/unc.pdf', bbox_inches='tight')
 
     # Run DINI
-    inp_dini, out_dini = torch.cat((inp_train, inp_c)).float(), torch.cat((out_train, out_c)).float()
+    inp_dini, out_dini = torch.cat((inp_train, inp_c)).double(), torch.cat((out_train, out_c)).double()
     inp_m, out_m = torch.isnan(inp_dini), torch.isnan(out_dini)
     inp_m2, out_m2 = torch.logical_not(inp_m), torch.logical_not(out_m)
     inp_imp, out_imp = init_impute_sep(inp_dini, out_dini, inp_m, out_m, strategy = 'zero')
@@ -327,167 +328,171 @@ if __name__ == '__main__':
         plt.imshow(confusion_matrix(y_true, y_pred, labels=np.arange(-1*label_idx if label_idx < -1 else -1*label_idx + 1)))
         plt.savefig(f'./results/model/{dataset}/cms/dini.pdf', bbox_inches='tight')
 
-    # Run simple FCN on MICE-imputed data
-    # inp_imp_base, out_imp_base = SimpleFill(fill_method='median').fit_transform(inp_c.numpy()), SimpleFill(fill_method='median').fit_transform(out_c.numpy())
-    inp_imp_base, out_imp_base = IterativeImputer(max_iter=1, n_nearest_features=1, imputation_order='descending', estimator=SGDRegressor(), tol=0.1).fit_transform(inp_c.numpy()), IterativeImputer(max_iter=1, n_nearest_features=1, imputation_order='descending', estimator=SGDRegressor(), tol=0.1).fit_transform(out_c.numpy())
-    inp_base, out_base = torch.cat([inp_train, torch.tensor(inp_imp_base)]), torch.cat([out_train, torch.tensor(out_imp_base)])
-    data_base = torch.cat([inp_base, out_base], dim=1)
+    # Run simple FCN on data imputed by baseline imputation methods
+    baseline_models = ['median', 'knn', 'svd', 'mice', 'spectral', 'matrix', 'gmm', 'gain']
+    for model in baseline_models:
+        data_imp_base = torch.Tensor(impute(torch.cat([inp_train, inp_c]), torch.cat([out_train, out_c]), model))
+        data_imp_base_m = np.isnan(data_imp_base.numpy())
+        data_imp_base = torch.Tensor(init_impute_all(data_imp_base.numpy(), data_imp_base_m, strategy = 'zero'))
+        data_base = data_imp_base.double()
+        inp_base, out_base = data_base[:, :label_idx], data_base[:, label_idx:]
 
-    if SAVE_RESULTS:
-        plt.imshow(data_base)
-        plt.savefig(f'./results/model/{dataset}/heatmaps/mice.pdf', bbox_inches='tight')
+        if SAVE_RESULTS:
+            plt.imshow(data_base)
+            os.makedirs(f'./results/model/{dataset}/heatmaps/', exist_ok=True)
+            plt.savefig(f'./results/model/{dataset}/heatmaps/{model}.pdf', bbox_inches='tight')
 
-    print(f'MICE MSE:\t', mse(data[data_m], data_base[data_m]))
-    print(f'MICE MAE:\t', mae(data[data_m], data_base[data_m]))
+        print(f'{model.upper()} MSE:\t', mse(data[data_m], data_base[data_m]))
+        print(f'{model.upper()} MAE:\t', mae(data[data_m], data_base[data_m]))
 
-    mice_model, optimizer, epoch, accuracy_list = load_model('FCN', inp_base, out_base, dataset, True, False)
-    num_epochs = 50
+        baseline_model, optimizer, epoch, accuracy_list = load_model('FCN', inp_base, out_base, dataset, True, False)
+        num_epochs = 50
 
-    early_stop_patience, curr_patience, old_loss = 3, 0, np.inf
-    for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
-        # Get Data
-        dataloader = DataLoader(list(zip(inp_base, out_base, inp_m, out_m)), batch_size=1, shuffle=False)
+        early_stop_patience, curr_patience, old_loss = 3, 0, np.inf
+        for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
+            # Get Data
+            dataloader = DataLoader(list(zip(inp_base, out_base, inp_m, out_m)), batch_size=1, shuffle=False)
 
-        # Tune Model
-        ls = []
-        for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
-            pred_i, pred_o = mice_model(inp, out)
-            loss = lf(pred_o, out)
-            ls.append(loss.item())   
-            optimizer.zero_grad(); loss.backward(); optimizer.step()
+            # Tune Model
+            ls = []
+            for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
+                pred_i, pred_o = baseline_model(inp, out)
+                loss = lf(pred_o, out)
+                ls.append(loss.item())   
+                optimizer.zero_grad(); loss.backward(); optimizer.step()
+            
+            tqdm.write(f'Epoch {e},\tLoss = {np.mean(ls)}')
+
+            if np.mean(ls) >= old_loss: curr_patience += 1
+            if curr_patience > early_stop_patience: break
+            old_loss = np.mean(ls)
+
+       # Get accuracy on train set
+        y_pred, y_true = [], []
+        train_dataloader = DataLoader(list(zip(inp_train, out_train)), batch_size=1, shuffle=False)
+        for inp, out in tqdm(train_dataloader, leave=False, ncols=80):
+            pred_i, pred_o = baseline_model(inp, torch.zeros_like(out))
+            if out.shape[1] > 1:
+                y_pred.append(np.argmax(pred_o.detach().numpy()))
+                y_true.append(np.argmax(out))
+            else:
+                y_pred.append(int(np.around(pred_o.detach().numpy())))
+                y_true.append(int(out))
+
+        train_accuracy = accuracy_score(y_true, y_pred)
+
+        # Get accuracy on test set
+        y_pred, y_true = [], []
+        test_dataloader = DataLoader(list(zip(inp_test, out_test)), batch_size=1, shuffle=False)
+        for inp, out in tqdm(test_dataloader, leave=False, ncols=80):
+            pred_i, pred_o = baseline_model(inp, torch.zeros_like(out))
+            if out.shape[1] > 1:
+                y_pred.append(np.argmax(pred_o.detach().numpy()))
+                y_true.append(np.argmax(out))
+            else:
+                y_pred.append(int(np.around(pred_o.detach().numpy())))
+                y_true.append(int(out))
+
+        test_accuracy = accuracy_score(y_true, y_pred)
+        test_precision = precision_score(y_true, y_pred, average = 'micro')
+        test_recall = recall_score(y_true, y_pred, average = 'micro')
+        test_f1_score = f1_score(y_true, y_pred, average = 'micro')
+
+        print(f'{model.upper()} Train Accuracy: {train_accuracy*100 : 0.2f}%')
+        print(f'{model.upper()} Test Accuracy: {test_accuracy*100 : 0.2f}%')
+        print(f'{model.upper()} Precision: {test_precision : 0.2f}')
+        print(f'{model.upper()} Recall: {test_recall : 0.2f}')
+        print(f'{model.upper()} F1 Score: {test_f1_score : 0.2f}')
+        print(f'{model.upper()} Confusion Matrix:\n{confusion_matrix(y_true, y_pred, labels=np.arange(-1*label_idx if label_idx < -1 else -1*label_idx + 1))}')
+
+        results[model] = {'test_acc': test_accuracy*100, 'f1': test_f1_score}
+
+        if SAVE_RESULTS:
+            ax = plt.figure().gca()
+            ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+            ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+            plt.imshow(confusion_matrix(y_true, y_pred, labels=np.arange(-1*label_idx if label_idx < -1 else -1*label_idx + 1)))
+            plt.savefig(f'./results/model/{dataset}/cms/{model}.pdf', bbox_inches='tight')
+
+   #  # Train a model only on the uncorrupted dataset
+   #  baseline_model, optimizer, epoch, accuracy_list = load_model('FCN', inp_train, out_train, dataset, True, False)
+   #  num_epochs = 50
+
+   #  early_stop_patience, curr_patience, old_loss = 3, 0, np.inf
+   #  for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
+   #      # Get Data
+   #      dataloader = DataLoader(list(zip(inp_train, out_train)), batch_size=1, shuffle=False)
+
+   #      # Tune Model
+   #      ls = []
+   #      for inp, out in tqdm(dataloader, leave=False, ncols=80):
+   #          pred_i, pred_o = baseline_model(inp, out)
+   #          loss = lf(pred_o, out)
+   #          ls.append(loss.item())   
+   #          optimizer.zero_grad(); loss.backward(); optimizer.step()
         
-        tqdm.write(f'Epoch {e},\tLoss = {np.mean(ls)}')
+   #      tqdm.write(f'Epoch {e},\tLoss = {np.mean(ls)}')
 
-        if np.mean(ls) >= old_loss: curr_patience += 1
-        if curr_patience > early_stop_patience: break
-        old_loss = np.mean(ls)
+   #      if np.mean(ls) >= old_loss: curr_patience += 1
+   #      if curr_patience > early_stop_patience: break
+   #      old_loss = np.mean(ls)
 
-   # Get accuracy on train set
-    y_pred, y_true = [], []
-    train_dataloader = DataLoader(list(zip(inp_train, out_train)), batch_size=1, shuffle=False)
-    for inp, out in tqdm(train_dataloader, leave=False, ncols=80):
-        pred_i, pred_o = mice_model(inp, torch.zeros_like(out))
-        if out.shape[1] > 1:
-            y_pred.append(np.argmax(pred_o.detach().numpy()))
-            y_true.append(np.argmax(out))
-        else:
-            y_pred.append(int(np.around(pred_o.detach().numpy())))
-            y_true.append(int(out))
+   # # Get accuracy on train set
+   #  y_pred, y_true = [], []
+   #  train_dataloader = DataLoader(list(zip(inp_train, out_train)), batch_size=1, shuffle=False)
+   #  for inp, out in tqdm(train_dataloader, leave=False, ncols=80):
+   #      pred_i, pred_o = baseline_model(inp, torch.zeros_like(out))
+   #      y_pred.append(np.argmax(pred_o.detach().numpy()))
+   #      y_true.append(np.argmax(out))
 
-    train_accuracy = accuracy_score(y_true, y_pred)
+   #  train_accuracy = accuracy_score(y_true, y_pred)
 
-    # Get accuracy on test set
-    y_pred, y_true = [], []
-    test_dataloader = DataLoader(list(zip(inp_test, out_test)), batch_size=1, shuffle=False)
-    for inp, out in tqdm(test_dataloader, leave=False, ncols=80):
-        pred_i, pred_o = mice_model(inp, torch.zeros_like(out))
-        if out.shape[1] > 1:
-            y_pred.append(np.argmax(pred_o.detach().numpy()))
-            y_true.append(np.argmax(out))
-        else:
-            y_pred.append(int(np.around(pred_o.detach().numpy())))
-            y_true.append(int(out))
+   #  # Get accuracy on test set
+   #  y_pred, y_true = [], []
+   #  test_dataloader = DataLoader(list(zip(inp_test, out_test)), batch_size=1, shuffle=False)
+   #  for inp, out in tqdm(test_dataloader, leave=False, ncols=80):
+   #      pred_i, pred_o = baseline_model(inp, torch.zeros_like(out))
+   #      if out.shape[1] > 1:
+   #          y_pred.append(np.argmax(pred_o.detach().numpy()))
+   #          y_true.append(np.argmax(out))
+   #      else:
+   #          y_pred.append(int(np.around(pred_o.detach().numpy())))
+   #          y_true.append(int(out))
 
-    test_accuracy = accuracy_score(y_true, y_pred)
-    test_precision = precision_score(y_true, y_pred, average = 'micro')
-    test_recall = recall_score(y_true, y_pred, average = 'micro')
-    test_f1_score = f1_score(y_true, y_pred, average = 'micro')
+   #  test_accuracy = accuracy_score(y_true, y_pred)
+   #  test_precision = precision_score(y_true, y_pred, average = 'micro')
+   #  test_recall = recall_score(y_true, y_pred, average = 'micro')
+   #  test_f1_score = f1_score(y_true, y_pred, average = 'micro')
 
-    print(f'MICE Train Accuracy: {train_accuracy*100 : 0.2f}%')
-    print(f'MICE Test Accuracy: {test_accuracy*100 : 0.2f}%')
-    print(f'MICE Precision: {test_precision : 0.2f}')
-    print(f'MICE Recall: {test_recall : 0.2f}')
-    print(f'MICE F1 Score: {test_f1_score : 0.2f}')
-    print(f'MICE Confusion Matrix:\n{confusion_matrix(y_true, y_pred, labels=np.arange(-1*label_idx if label_idx < -1 else -1*label_idx + 1))}')
-
-    results['mice'] = {'test_acc': test_accuracy*100, 'f1': test_f1_score}
-
-    if SAVE_RESULTS:
-        ax = plt.figure().gca()
-        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
-        plt.imshow(confusion_matrix(y_true, y_pred, labels=np.arange(-1*label_idx if label_idx < -1 else -1*label_idx + 1)))
-        plt.savefig(f'./results/model/{dataset}/cms/mice.pdf', bbox_inches='tight')
-
-    # Train a model only on the uncorrupted dataset
-    baseline_model, optimizer, epoch, accuracy_list = load_model('FCN', inp_train, out_train, dataset, True, False)
-    num_epochs = 50
-
-    early_stop_patience, curr_patience, old_loss = 3, 0, np.inf
-    for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
-        # Get Data
-        dataloader = DataLoader(list(zip(inp_train, out_train)), batch_size=1, shuffle=False)
-
-        # Tune Model
-        ls = []
-        for inp, out in tqdm(dataloader, leave=False, ncols=80):
-            pred_i, pred_o = baseline_model(inp, out)
-            loss = lf(pred_o, out)
-            ls.append(loss.item())   
-            optimizer.zero_grad(); loss.backward(); optimizer.step()
-        
-        tqdm.write(f'Epoch {e},\tLoss = {np.mean(ls)}')
-
-        if np.mean(ls) >= old_loss: curr_patience += 1
-        if curr_patience > early_stop_patience: break
-        old_loss = np.mean(ls)
-
-   # Get accuracy on train set
-    y_pred, y_true = [], []
-    train_dataloader = DataLoader(list(zip(inp_train, out_train)), batch_size=1, shuffle=False)
-    for inp, out in tqdm(train_dataloader, leave=False, ncols=80):
-        pred_i, pred_o = baseline_model(inp, torch.zeros_like(out))
-        y_pred.append(np.argmax(pred_o.detach().numpy()))
-        y_true.append(np.argmax(out))
-
-    train_accuracy = accuracy_score(y_true, y_pred)
-
-    # Get accuracy on test set
-    y_pred, y_true = [], []
-    test_dataloader = DataLoader(list(zip(inp_test, out_test)), batch_size=1, shuffle=False)
-    for inp, out in tqdm(test_dataloader, leave=False, ncols=80):
-        pred_i, pred_o = baseline_model(inp, torch.zeros_like(out))
-        if out.shape[1] > 1:
-            y_pred.append(np.argmax(pred_o.detach().numpy()))
-            y_true.append(np.argmax(out))
-        else:
-            y_pred.append(int(np.around(pred_o.detach().numpy())))
-            y_true.append(int(out))
-
-    test_accuracy = accuracy_score(y_true, y_pred)
-    test_precision = precision_score(y_true, y_pred, average = 'micro')
-    test_recall = recall_score(y_true, y_pred, average = 'micro')
-    test_f1_score = f1_score(y_true, y_pred, average = 'micro')
-
-    print(f'Baseline Train Accuracy: {train_accuracy*100 : 0.2f}%')
-    print(f'Baseline Test Accuracy: {test_accuracy*100 : 0.2f}%')
-    print(f'Baseline Precision: {test_precision : 0.2f}')
-    print(f'Baseline Recall: {test_recall : 0.2f}')
-    print(f'Baseline F1 Score: {test_f1_score : 0.2f}')
-    print(f'Baseline Confusion Matrix:\n{confusion_matrix(y_true, y_pred, labels=np.arange(-1*label_idx if label_idx < -1 else -1*label_idx + 1))}')
+   #  print(f'Baseline Train Accuracy: {train_accuracy*100 : 0.2f}%')
+   #  print(f'Baseline Test Accuracy: {test_accuracy*100 : 0.2f}%')
+   #  print(f'Baseline Precision: {test_precision : 0.2f}')
+   #  print(f'Baseline Recall: {test_recall : 0.2f}')
+   #  print(f'Baseline F1 Score: {test_f1_score : 0.2f}')
+   #  print(f'Baseline Confusion Matrix:\n{confusion_matrix(y_true, y_pred, labels=np.arange(-1*label_idx if label_idx < -1 else -1*label_idx + 1))}')
 
     # results['baseline'] = {'test_acc': test_accuracy*100, 'f1': test_f1_score}
 
-    if SAVE_RESULTS:
-        ax = plt.figure().gca()
-        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
-        plt.imshow(confusion_matrix(y_true, y_pred, labels=np.arange(-1*label_idx if label_idx < -1 else -1*label_idx + 1)))
-        plt.savefig(f'./results/model/{dataset}/cms/baseline.pdf', bbox_inches='tight')
+    # if SAVE_RESULTS:
+    #     ax = plt.figure().gca()
+    #     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    #     ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    #     plt.imshow(confusion_matrix(y_true, y_pred, labels=np.arange(-1*label_idx if label_idx < -1 else -1*label_idx + 1)))
+    #     plt.savefig(f'./results/model/{dataset}/cms/baseline.pdf', bbox_inches='tight')
 
     # Plot results
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(18, 4.8))
     x = np.arange(len(results))
     width = 0.4
     ax2 = ax.twinx()
 
     # ax.bar(x, [results[key][0] for key in results.keys()], color='#4292C6', label='MSE')
-    ax.bar(x - width*0.5, [results[key]['test_acc'] for key in ['uncorrupted', 'mice', 'dini']], width, color='#F1C40F', label='Test Accuracy')
-    ax2 .bar(x + width*0.5, [results[key]['f1'] for key in ['uncorrupted', 'mice', 'dini']], width, color='#E67E22', label='F1 Score')
+    ax.bar(x - width*0.5, [results[key]['test_acc'] for key in ['uncorrupted'] + baseline_models + ['dini']], width, color='#F1C40F', label='Test Accuracy')
+    ax2 .bar(x + width*0.5, [results[key]['f1'] for key in ['uncorrupted'] + baseline_models + ['dini']], width, color='#E67E22', label='F1 Score')
     ax.set_ylabel('Test Accuracy (%)')
     ax2.set_ylabel('F1 Score')
     ax.set_xticks(x)
-    ax.set_xticklabels(['Uncorrupted', 'MICE', 'DINI'])
+    ax.set_xticklabels(['Uncorrupted'] + [model.upper() for model in baseline_models] + ['DINI'])
     plt.title(f'Dataset: {dataset.upper()} | Corruption strategy: {args.strategy.upper()}')
     plt.grid(axis='y', linestyle='--')
     plt.savefig(f'./results/model/{dataset}/barplot.pdf', bbox_inches='tight')
