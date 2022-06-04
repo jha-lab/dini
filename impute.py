@@ -40,6 +40,67 @@ from functools import partialmethod
 warnings.filterwarnings('ignore')
 # tqdm.__init__ = partialmethod(tqdm.__init__, disable=True)
 
+
+def impute(inp_c, out_c, model):
+    inp_m, out_m = torch.isnan(inp_c), torch.isnan(out_c)
+    inp_c_imputed, out_c_imputed = init_impute_sep(inp_c, out_c, inp_m, out_m, strategy = 'zero')
+    inp_m_float, out_m_float = inp_m.float(), out_m.float()
+
+    if model == 'mean':
+        inp_new, out_new = SimpleFill(fill_method='mean').fit_transform(inp_c), SimpleFill(fill_method='mean').fit_transform(out_c)
+        data_new = np.concatenate((inp_new, out_new), axis=1)
+    elif model == 'median':
+        inp_new, out_new = SimpleFill(fill_method='median').fit_transform(inp_c), SimpleFill(fill_method='median').fit_transform(out_c)
+        data_new = np.concatenate((inp_new, out_new), axis=1)
+    elif model == 'knn':
+        k = [1,5,10][0]
+        inp_new, out_new = KNN(k=1, use_argpartition=True, verbose=False).fit_transform(inp_c), KNN(k=1, use_argpartition=True, verbose=False).fit_transform(out_c)
+        data_new = np.concatenate((inp_new, out_new), axis=1)
+    elif model == 'svd':
+        inp_rank = [np.ceil((inp_c.shape[1]-1)/10),np.ceil((inp_c.shape[1]-1)/5), inp_c.shape[1]-1][0]
+        out_rank = [np.ceil((out_c.shape[1]-1)/10),np.ceil((out_c.shape[1]-1)/5), out_c.shape[1]-1][0]
+        inp_new, out_new = IterativeSVD(rank=int(inp_rank), verbose=False).fit_transform(inp_c), IterativeSVD(rank=int(out_rank), verbose=False).fit_transform(out_c) if out_c.shape[1] > 1 else out_c_imputed
+        data_new = np.concatenate((inp_new, out_new), axis=1)
+    elif model == 'mice':
+        max_iter = [1,5,10][0]
+        inp_new, out_new = IterativeImputer(max_iter=1, n_nearest_features=1, imputation_order='descending', estimator=SGDRegressor(), tol=0.1).fit_transform(inp_c), IterativeImputer(max_iter=1, n_nearest_features=1, imputation_order='descending', estimator=SGDRegressor(), tol=0.1).fit_transform(out_c)
+        data_new = np.concatenate((inp_new, out_new), axis=1)
+    elif model == 'spectral':
+        sparsity = [0.5,None,1][0]
+        inp_new, out_new = SoftImpute(max_iters=1, shrinkage_value=0.5, verbose=False).fit_transform(inp_c), SoftImpute(max_iters=1, shrinkage_value=0.5, verbose=False).fit_transform(out_c)
+        data_new = np.concatenate((inp_new, out_new), axis=1)
+    elif model == 'matrix':
+        inp_new, out_new = MatrixFactorization(max_iters=1, rank=1, learning_rate=0.1, verbose=False).fit_transform(inp_c), MatrixFactorization(max_iters=1, rank=1, learning_rate=0.1, verbose=False).fit_transform(out_c)
+        data_new = np.concatenate((inp_new, out_new), axis=1)
+    elif model == 'gmm':
+        subset = correct_subset(inp_c_imputed.numpy(), inp_m.numpy().astype(bool))
+        gm = GaussianMixture(n_components=10, random_state=0).fit(subset)
+        inp_new = gmm_opt(gm, inp_c_imputed.numpy(), inp_m.numpy().astype(bool))
+
+        subset = correct_subset(out_c_imputed.numpy(), out_m.numpy().astype(bool))
+        gm = GaussianMixture(n_components=10, random_state=0).fit(subset)
+        out_new = gmm_opt(gm, out_c_imputed.numpy(), out_m.numpy().astype(bool))
+
+        data_new = np.concatenate((inp_new, out_new), axis=1)
+    elif model == 'gain':
+        dataloader_forward = DataLoader(list(zip(inp_c.float(), out_c.float(), (1-inp_m_float))), batch_size=128, shuffle=False)
+        dataloader_backward = DataLoader(list(zip(out_c.float(), inp_c.float(), (1-out_m_float))), batch_size=128, shuffle=False)
+        
+        # Train forward model
+        trainer = GAINTrainer(inp_c.shape[1], out_c.shape[1], {'min': torch.zeros(inp_c.shape[1]), 'max': torch.ones(inp_c.shape[1])}, {})
+        perf_dict, inp_imputed = trainer.train_model(dataloader_forward, dataloader_forward)
+
+        # Train backward model
+        trainer = GAINTrainer(out_c.shape[1], inp_c.shape[1], {'min': torch.zeros(out_c.shape[1]), 'max': torch.ones(out_c.shape[1])}, {})
+        perf_dict, out_imputed = trainer.train_model(dataloader_backward, dataloader_backward)
+
+        data_new = torch.cat((inp_imputed, out_imputed), dim=1)
+    else:
+        raise NotImplementedError()
+
+    return data_new
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='DINI')
     parser.add_argument('--dataset', 
@@ -81,36 +142,9 @@ if __name__ == '__main__':
     results = {}
 
     # Run baselines
-    baseline_models = ['mean', 'median', 'knn', 'svd', 'mice', 'spectral', 'matrix']
-    for model in baseline_models:
-        if model == 'mean':
-            inp_new, out_new = SimpleFill(fill_method='mean').fit_transform(inp_c), SimpleFill(fill_method='mean').fit_transform(out_c)
-            data_new = np.concatenate((inp_new, out_new), axis=1)
-        elif model == 'median':
-            inp_new, out_new = SimpleFill(fill_method='median').fit_transform(inp_c), SimpleFill(fill_method='median').fit_transform(out_c)
-            data_new = np.concatenate((inp_new, out_new), axis=1)
-        elif model == 'knn':
-            k = [1,5,10][0]
-            inp_new, out_new = KNN(k=1, use_argpartition=True, verbose=False).fit_transform(inp_c), KNN(k=1, use_argpartition=True, verbose=False).fit_transform(out_c)
-            data_new = np.concatenate((inp_new, out_new), axis=1)
-        elif model == 'svd':
-            inp_rank = [np.ceil((inp_c.shape[1]-1)/10),np.ceil((inp_c.shape[1]-1)/5), inp_c.shape[1]-1][0]
-            out_rank = [np.ceil((out_c.shape[1]-1)/10),np.ceil((out_c.shape[1]-1)/5), out_c.shape[1]-1][0]
-            inp_new, out_new = IterativeSVD(rank=int(inp_rank), verbose=False).fit_transform(inp_c), IterativeSVD(rank=int(out_rank), verbose=False).fit_transform(out_c) if out_c.shape[1] > 1 else out_c_imputed
-            data_new = np.concatenate((inp_new, out_new), axis=1)
-        elif model == 'mice':
-            max_iter = [1,5,10][0]
-            inp_new, out_new = IterativeImputer(max_iter=1, n_nearest_features=1, imputation_order='descending', estimator=SGDRegressor(), tol=0.1).fit_transform(inp_c), IterativeImputer(max_iter=1, n_nearest_features=1, imputation_order='descending', estimator=SGDRegressor(), tol=0.1).fit_transform(out_c)
-            data_new = np.concatenate((inp_new, out_new), axis=1)
-        elif model == 'spectral':
-            sparsity = [0.5,None,1][0]
-            inp_new, out_new = SoftImpute(max_iters=1, shrinkage_value=0.5, verbose=False).fit_transform(inp_c), SoftImpute(max_iters=1, shrinkage_value=0.5, verbose=False).fit_transform(out_c)
-            data_new = np.concatenate((inp_new, out_new), axis=1)
-        elif model == 'matrix':
-            inp_new, out_new = MatrixFactorization(max_iters=1, rank=1, learning_rate=0.1, verbose=False).fit_transform(inp_c), MatrixFactorization(max_iters=1, rank=1, learning_rate=0.1, verbose=False).fit_transform(out_c)
-            data_new = np.concatenate((inp_new, out_new), axis=1)
-        else:
-            raise NotImplementedError()
+    simple_baseline_models = ['mean', 'median', 'knn', 'svd', 'mice', 'spectral', 'matrix']
+    for model in simple_baseline_models:
+        data_new = impute(inp_c, out_c, model)
 
         data_new_m = np.isnan(data_new)
         data_new = init_impute_all(data_new, data_new_m, strategy = 'zero')
@@ -121,15 +155,7 @@ if __name__ == '__main__':
         results[model] = [mse(data[data_m], data_new[data_m]), mae(data[data_m], data_new[data_m])]
 
     # Run GMM
-    subset = correct_subset(inp_c_imputed.numpy(), inp_m.numpy().astype(bool))
-    gm = GaussianMixture(n_components=10, random_state=0).fit(subset)
-    inp_new = gmm_opt(gm, inp_c_imputed.numpy(), inp_m.numpy().astype(bool))
-
-    subset = correct_subset(out_c_imputed.numpy(), out_m.numpy().astype(bool))
-    gm = GaussianMixture(n_components=10, random_state=0).fit(subset)
-    out_new = gmm_opt(gm, out_c_imputed.numpy(), out_m.numpy().astype(bool))
-
-    data_new = np.concatenate((inp_new, out_new), axis=1)
+    data_new = impute(inp_c, out_c, 'gmm')
 
     # subset = correct_subset(data_c_imputed, data_m)
     # gm = GaussianMixture(n_components=30, random_state=0).fit(subset)
@@ -142,20 +168,8 @@ if __name__ == '__main__':
     results['gmm'] = [mse(data[data_m], data_new[data_m]), mae(data[data_m], data_new[data_m])]
 
     # Run GAIN
-    inp_m_float, out_m_float = inp_m.float(), out_m.float()
+    data_new = impute(inp_c, out_c, 'gain')
 
-    dataloader_forward = DataLoader(list(zip(inp, inp_c, out_c, (1-inp_m_float))), batch_size=128, shuffle=False)
-    dataloader_backward = DataLoader(list(zip(out, out_c, inp_c, (1-out_m_float))), batch_size=128, shuffle=False)
-    
-    # Train forward model
-    trainer = GAINTrainer(inp_c.shape[1], out_c.shape[1], {'min': torch.zeros(inp_c.shape[1]), 'max': torch.ones(inp_c.shape[1])}, args)
-    perf_dict, inp_imputed = trainer.train_model(dataloader_forward, dataloader_forward)
-
-    # Train backward model
-    trainer = GAINTrainer(out_c.shape[1], inp_c.shape[1], {'min': torch.zeros(out_c.shape[1]), 'max': torch.ones(out_c.shape[1])}, args)
-    perf_dict, out_imputed = trainer.train_model(dataloader_backward, dataloader_backward)
-
-    data_new = torch.cat((inp_imputed, out_imputed), dim=1)
     print(f'GAIN MSE:\t', mse(data[data_m], data_new[data_m]))
     print(f'GAIN MAE:\t', mae(data[data_m], data_new[data_m]))
 
