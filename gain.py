@@ -131,7 +131,7 @@ class GAINTrainer:
         self.generator.train()
         device = torch.device('cpu')
         b_loader = loader
-        for _, x_batch, _, m_batch in b_loader:
+        for x_batch, _, m_batch in b_loader:
             x_batch, m_batch = x_batch.to(device), m_batch.to(device)
             self.g_optimizer.zero_grad()
             sample, random_combined, x_hat = self.generator(x_batch, m_batch)
@@ -163,32 +163,26 @@ class GAINTrainer:
         self.discriminator.eval()
         self.generator.eval()
         all_imputed = []
-        all_orig = []
         all_mask = []
         all_data = []
-        for x_original, x_batch, _, m_batch in loader:
-            x_batch, m_batch, x_original = x_batch.to(device), m_batch.to(device), x_original.to(device)
+        for x_batch, _, m_batch in loader:
+            x_batch, m_batch = x_batch.to(device), m_batch.to(device)
             sample, random_combined, x_hat = self.generator(x_batch, m_batch)
             x_batch[m_batch == 0] = 0.
             imputed_data = m_batch * self.generator.normalizer(x_batch) + (1-m_batch) * sample
             all_imputed.append(imputed_data.detach())
-            all_orig.append(x_original)
             all_mask.append(m_batch)
             all_data.append(x_batch)
 
         imputed_data = torch.cat(all_imputed, dim=0)
-        x_original = torch.cat(all_orig, dim=0)
         mask = torch.cat(all_mask, dim=0)
         x = torch.cat(all_data, dim=0)
         imputed_data = self.generator.normalizer(imputed_data, mode="renormalize")
         x[mask == 0] = np.nan
         imputed_data = self.rounding(imputed_data, x)
         imputed_data = self.generator.normalizer(imputed_data)
-        x_original = self.generator.normalizer(x_original)
 
-        sq_error = torch.sum(((1 - mask) * x_original - (1 - mask) * imputed_data) ** 2)
-        rmse = torch.sqrt(sq_error / ((1-mask).sum())).detach().cpu().item()
-        return {mode+"-RMSE": rmse}, imputed_data
+        return {}, imputed_data
 
     def log_results(self, res_dict):
         if not os.path.isdir(self.result_dir):
