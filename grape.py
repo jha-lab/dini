@@ -299,7 +299,7 @@ def init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero'):
         inp_r, out_r = torch.rand(inp_c.shape), torch.rand(out_c.shape)
     else:
         raise NotImplementedError()
-    inp_r, out_r = inp_r.float(), out_r.float()
+    inp_r, out_r = inp_r.double(), out_r.double()
     inp_c_imputed[inp_m], out_c_imputed[out_m] = inp_r[inp_m], out_r[out_m]
     return inp_c_imputed, out_c_imputed
  
