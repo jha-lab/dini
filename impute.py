@@ -74,10 +74,12 @@ def impute(inp_c, out_c, model):
         data_new = np.concatenate((inp_new, out_new), axis=1)
     elif model == 'gmm':
         subset = correct_subset(inp_c_imputed.numpy(), inp_m.numpy().astype(bool))
+        if subset.shape[0] == 1: subset = np.concatenate((subset,)*10, axis=0)
         gm = GaussianMixture(n_components=10, random_state=0).fit(subset)
         inp_new = gmm_opt(gm, inp_c_imputed.numpy(), inp_m.numpy().astype(bool))
 
         subset = correct_subset(out_c_imputed.numpy(), out_m.numpy().astype(bool))
+        if subset.shape[0] == 1: subset = np.concatenate((subset,)*10, axis=0)
         gm = GaussianMixture(n_components=10, random_state=0).fit(subset)
         out_new = gmm_opt(gm, out_c_imputed.numpy(), out_m.numpy().astype(bool))
 
