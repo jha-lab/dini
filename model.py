@@ -153,7 +153,7 @@ if __name__ == '__main__':
             df = pd.concat([df.loc[df['Gas'] == i].sample(500, random_state=0) for i in [0, 1]])
             df = df.sample(frac=1, random_state=0)
         elif dataset == 'swat':
-            df = pd.concat([df.loc[df['Normal/Attack'] == i].sample(500, random_state=0) for i in [0, 1]])
+            df = pd.concat([df.loc[df['Normal/Attack'] == i].sample(100, random_state=0) for i in [0, 1]])
             df = df.sample(frac=1, random_state=0)
     else:
         df = df.sample(frac=0.01, random_state=0) # randomize dataset
@@ -192,7 +192,7 @@ if __name__ == '__main__':
     inp_c, out_c = torch.tensor(corrupt_df.values[:, :label_idx]), torch.tensor(corrupt_df.values[:, label_idx:])
     inp_test, out_test = torch.tensor(df_test.values[:, :label_idx]), torch.tensor(df_test.values[:, label_idx:])
 
-    num_epochs = 50
+    num_epochs = 100
     lf = nn.MSELoss(reduction = 'mean')
     if label_idx == -1:
         lfo = nn.BCELoss(reduction = 'mean')
@@ -211,7 +211,7 @@ if __name__ == '__main__':
     print(f'Uncorrupted F1 Score: {test_f1_score : 0.2f}')
     print(f'Uncorrupted Confusion Matrix:\n{cm}')
 
-    results = {'uncorrupted': {'train_acc': train_accuracy*100, 'f1': test_f1_score}}
+    results = {'uncorrupted': {'test_acc': test_accuracy*100, 'f1': test_f1_score}}
 
     if SAVE_RESULTS:
         os.makedirs(f'./results/model/{dataset}/cms/', exist_ok=True)
@@ -237,9 +237,10 @@ if __name__ == '__main__':
         plt.imshow(data)
         plt.savefig(f'./results/model/{dataset}/heatmaps/orig.pdf', bbox_inches='tight')
 
-    num_epochs = 300
+    num_epochs = 500
 
-    early_stop_patience, curr_patience, old_loss = 3, 0, np.inf
+    ls = []
+    early_stop_patience, curr_patience, old_loss = 5, 0, np.inf
     for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
         # Get Data
         dataloader = DataLoader(list(zip(inp_imp, out_imp, inp_m, out_m)), batch_size=64, shuffle=False)
@@ -256,9 +257,10 @@ if __name__ == '__main__':
         data_imp = torch.cat([inp_imp, out_imp], dim=1)
         tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {mse(data[data_m].detach().numpy(), data_imp[data_m].detach().numpy())},\tMAE = {mae(data[data_m].detach().numpy(), data_imp[data_m].detach().numpy())}')  
 
-        if lf(data[data_m], data_imp[data_m]).item() >= old_loss: curr_patience += 1
+        ls.append(lf(data[data_m], data_imp[data_m]).item())
+        if np.mean(ls[-10:]) >= old_loss: curr_patience += 1
         if curr_patience > early_stop_patience: break
-        old_loss = lf(data[data_m], data_imp[data_m]).item()
+        old_loss = np.mean(ls[-10:])
 
         # Save imputed data heatmap
         if e%10 == 0 and SAVE_RESULTS:
@@ -283,7 +285,7 @@ if __name__ == '__main__':
     print(f'DINI F1 Score: {test_f1_score : 0.2f}')
     print(f'DINI Confusion Matrix:\n{cm}')
 
-    results['dini'] = {'train_acc': train_accuracy*100, 'f1': test_f1_score}
+    results['dini'] = {'test_acc': test_accuracy*100, 'f1': test_f1_score}
 
     if SAVE_RESULTS:
         ax = plt.figure().gca()
@@ -295,11 +297,13 @@ if __name__ == '__main__':
     # Run simple FCN on data imputed by baseline imputation methods
     baseline_models = ['median', 'knn', 'svd', 'mice', 'spectral', 'matrix', 'gmm', 'gain']
     for model in baseline_models:
-        data_imp_base = torch.Tensor(impute(torch.cat([inp_train, inp_c]), torch.cat([out_train, out_c]), model))
+        data_imp_base = torch.Tensor(impute(inp_c, out_c, model))
         data_imp_base_m = np.isnan(data_imp_base.numpy())
         data_imp_base = torch.Tensor(init_impute_all(data_imp_base.numpy(), data_imp_base_m, strategy = 'zero'))
         data_base = data_imp_base.double()
         inp_base, out_base = data_base[:, :label_idx], data_base[:, label_idx:]
+        inp_base, out_base = torch.cat([inp_train, inp_base]), torch.cat([out_train, out_base])
+        data_base = torch.cat([inp_base, out_base], dim=1)
 
         if SAVE_RESULTS:
             plt.imshow(data_base)
@@ -310,7 +314,7 @@ if __name__ == '__main__':
         print(f'{model.upper()} MAE:\t', mae(data[data_m], data_base[data_m]))
 
         # Train FCN on baseline imputed data
-        num_epochs = 5
+        num_epochs = 10
         train_accuracy, test_accuracy, test_precision, test_recall, test_f1_score, cm = train_fcn(inp_base, out_base, inp_train, out_train, inp_test, out_test)
 
         print(f'{model.upper()} Train Accuracy: {train_accuracy*100 : 0.2f}%')
@@ -320,7 +324,7 @@ if __name__ == '__main__':
         print(f'{model.upper()} F1 Score: {test_f1_score : 0.2f}')
         print(f'{model.upper()} Confusion Matrix:\n{cm}')
 
-        results[model] = {'train_acc': train_accuracy*100, 'f1': test_f1_score}
+        results[model] = {'test_acc': test_accuracy*100, 'f1': test_f1_score}
 
         if SAVE_RESULTS:
             ax = plt.figure().gca()
@@ -397,17 +401,17 @@ if __name__ == '__main__':
 
     # Plot results
     fig, ax = plt.subplots(figsize=(18, 4.8))
-    x = np.arange(len(results))
+    x = np.arange(len(results)-1)
     width = 0.4
     ax2 = ax.twinx()
 
     # ax.bar(x, [results[key][0] for key in results.keys()], color='#4292C6', label='MSE')
-    ax.bar(x - width*0.5, [results[key]['train_acc'] for key in ['uncorrupted'] + baseline_models + ['dini']], width, color='#F1C40F', label='Train Accuracy')
-    ax2 .bar(x + width*0.5, [results[key]['f1'] for key in ['uncorrupted'] + baseline_models + ['dini']], width, color='#E67E22', label='F1 Score')
+    ax.bar(x, [results[key]['test_acc'] for key in baseline_models + ['dini']], width, color='#F1C40F', label='Test Accuracy')
+    ax2 .plot(x, [results[key]['f1'] for key in baseline_models + ['dini']], '.-', markersize=18, linewidth=4, color='#E67E22', label='F1 Score')
     ax.set_ylabel('Test Accuracy (%)')
     ax2.set_ylabel('F1 Score')
     ax.set_xticks(x)
-    ax.set_xticklabels(['Uncorrupted'] + [model.upper() for model in baseline_models] + ['DINI'])
+    ax.set_xticklabels([model.upper() for model in baseline_models] + ['DINI'])
     plt.title(f'Dataset: {dataset.upper()} | Corruption strategy: {args.strategy.upper()}')
     plt.grid(axis='y', linestyle='--')
     plt.savefig(f'./results/model/{dataset}/barplot.pdf', bbox_inches='tight')
