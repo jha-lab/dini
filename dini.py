@@ -78,7 +78,7 @@ def opt(model, dataloader, use_ce=False):
     for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
         # update input
         inp.requires_grad = True; out.requires_grad = True
-        optimizer = torch.optim.Adam([inp, out] , lr=0.0001)
+        optimizer = torch.optim.Adam([inp, out] , lr=0.0005)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
         iteration = 0; equal = 0; z_old = 100
         inp_orig, out_orig = deepcopy(inp.detach().data), deepcopy(out.detach().data)
