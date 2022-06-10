@@ -292,7 +292,7 @@ def load_data(dataset):
     return inp, out, inp_c, out_c
 
 def init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero'):
-    inp_c_imputed, out_c_imputed = deepcopy(inp_c), deepcopy(out_c)
+    inp_c_imputed, out_c_imputed = deepcopy(inp_c).double(), deepcopy(out_c).double()
     if strategy == 'zero':
         inp_r, out_r = torch.zeros(inp_c.shape), torch.zeros(out_c.shape)
     elif strategy == 'random':
