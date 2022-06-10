@@ -303,7 +303,7 @@ if __name__ == '__main__':
     df.index = ['mse', 'mae']
 
     fraction_str = str(args.fraction).split(".")[-1]
-    df.to_csv(f'./results/{args.dataset.lower()}_{args.strategy.lower()}_p{fraction_str}.csv')
+    df.to_csv(f'./results/impute/{args.dataset.lower()}_{args.strategy.lower()}_p{fraction_str}.csv')
 
     fig, ax = plt.subplots(figsize=(18, 4.8))
     x = np.arange(len(results))
