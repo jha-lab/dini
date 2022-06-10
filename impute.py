@@ -54,7 +54,7 @@ def impute(inp_c, out_c, model):
         data_new = np.concatenate((inp_new, out_new), axis=1)
     elif model == 'knn':
         k = [1,5,10][0]
-        inp_new, out_new = KNN(k=1, use_argpartition=True, verbose=False).fit_transform(inp_c), KNN(k=1, use_argpartition=True, verbose=False).fit_transform(out_c)
+        inp_new, out_new = KNN(k=1, use_argpartition=True, orientation='columns', verbose=False).fit_transform(inp_c), KNN(k=1, use_argpartition=True, verbose=False).fit_transform(out_c)
         data_new = np.concatenate((inp_new, out_new), axis=1)
     elif model == 'svd':
         inp_rank = [np.ceil((inp_c.shape[1]-1)/10),np.ceil((inp_c.shape[1]-1)/5), inp_c.shape[1]-1][0]
@@ -75,12 +75,12 @@ def impute(inp_c, out_c, model):
     elif model == 'gmm':
         subset = correct_subset(inp_c_imputed.numpy(), inp_m.numpy().astype(bool))
         if subset.shape[0] == 1: subset = np.concatenate((subset,)*10, axis=0)
-        gm = GaussianMixture(n_components=10, random_state=0).fit(subset)
+        gm = GaussianMixture(n_components=50, random_state=0).fit(subset)
         inp_new = gmm_opt(gm, inp_c_imputed.numpy(), inp_m.numpy().astype(bool))
 
         subset = correct_subset(out_c_imputed.numpy(), out_m.numpy().astype(bool))
         if subset.shape[0] == 1: subset = np.concatenate((subset,)*10, axis=0)
-        gm = GaussianMixture(n_components=10, random_state=0).fit(subset)
+        gm = GaussianMixture(n_components=50, random_state=0).fit(subset)
         out_new = gmm_opt(gm, out_c_imputed.numpy(), out_m.numpy().astype(bool))
 
         data_new = np.concatenate((inp_new, out_new), axis=1)
@@ -190,7 +190,7 @@ if __name__ == '__main__':
     parser.add_argument('--gnn_activation', type=str, default='relu')
     parser.add_argument('--impute_hiddens', type=str, default='64')
     parser.add_argument('--impute_activation', type=str, default='relu')
-    parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--opt', type=str, default='adam')
     parser.add_argument('--opt_scheduler', type=str, default='none')
     parser.add_argument('--opt_restart', type=int, default=0)
@@ -259,7 +259,7 @@ if __name__ == '__main__':
     results['grape*'] = [mse(pred, labels), mae(pred, labels)]
 
     # Run DINI
-    num_epochs = 100
+    num_epochs = 300
     lf = nn.MSELoss(reduction = 'mean')
 
     inp, out, inp_c, out_c = load_data_sep(args.dataset)
