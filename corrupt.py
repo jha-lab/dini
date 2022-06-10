@@ -138,6 +138,9 @@ def process(dataset, corruption, fraction = 0.1):
 	elif dataset == 'flights':
 		def split(df):
 			return df.iloc[:, :-5].values, df.iloc[:, -5:].values
+	elif dataset == 'traffic':
+		def split(df):
+			return df.iloc[:, :-1].values, df.iloc[:, -1:].values.reshape(-1, 1)
 	inp, out = split(df)
 	assert not np.any(np.isnan(inp)) and not np.any(np.isnan(out))
 	inp_c, out_c = split(corrupt_df)
