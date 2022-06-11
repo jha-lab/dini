@@ -7,6 +7,7 @@ temp/
 data/gas/ethylene_CO.txt
 data/gas/ethylene_methane.txt
 data/swat/SWaT_Dataset_Attack_v0.csv
+data/swat/data.csv
 data/covid/data.csv
 heatmaps/
 .DS_Store
