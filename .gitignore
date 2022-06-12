@@ -10,6 +10,8 @@ data/swat/SWaT_Dataset_Attack_v0.csv
 data/swat/data.csv
 data/covid/data.csv
 heatmaps/
+cms/
+results/
 .DS_Store
 Icon?
 ![iI]con[_a-zA-Z0-9]
