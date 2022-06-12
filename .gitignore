@@ -139,3 +139,5 @@ dmypy.json
 # Pyre type checker
 .pyre/
 *.npy
+plot_results.ipynb
+*.pdf
