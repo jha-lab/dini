@@ -7,7 +7,7 @@ import os
 
 # Read csv file
 
-if not path.exists('./SWaT_Dataset_Attack_v0.csv'): 
+if not os.path.exists('./SWaT_Dataset_Attack_v0.csv'): 
 	raise RuntimeError('Raw dataset file not found. Request access from: https://itrust.sutd.edu.sg/itrust-labs_datasets/dataset_info/')
 	
 df = pd.read_csv('./SWaT_Dataset_Attack_v0.csv')
