@@ -41,6 +41,10 @@ warnings.filterwarnings('ignore')
 # tqdm.__init__ = partialmethod(tqdm.__init__, disable=True)
 
 
+PRETRAIN_DINI = True
+USE_PRETRAINED_ONLY = True # Can only be True if PRETRAIN_DINI is True
+
+
 def impute(inp_c, out_c, model):
     inp_m, out_m = torch.isnan(inp_c), torch.isnan(out_c)
     inp_c_imputed, out_c_imputed = init_impute_sep(inp_c, out_c, inp_m, out_m, strategy = 'zero')
@@ -277,16 +281,31 @@ if __name__ == '__main__':
     data_m = torch.cat([inp_m, out_m], dim=1)
     data = torch.cat([inp, out], dim=1)
 
+    inp_correct = torch.Tensor(correct_subset(inp_c.numpy(), inp_m.numpy().astype(bool)))
+    out_correct = torch.Tensor(correct_subset(out_c.numpy(), out_m.numpy().astype(bool)))
+
+    if PRETRAIN_DINI:
+        print(f'{color.BLUE}Pretraining DINI...{color.ENDC}')
+        dataloader = DataLoader(list(zip(inp_correct.double(), out_correct.double(), torch.Tensor(np.zeros_like(inp_correct, dtype=bool)), torch.Tensor(np.zeros_like(out_correct, dtype=bool)))), batch_size=1, shuffle=False)
+
+        for e in tqdm(list(range(epoch+1, epoch+100+1)), ncols=80):
+            unfreeze_model(model)
+            loss = backprop(e, model, optimizer, dataloader)
+            accuracy_list.append(loss)
+
+            tqdm.write(f'Epoch {e},\tLoss = {loss}')
+
     early_stop_patience, curr_patience, old_loss = 3, 0, np.inf
     for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
         # Get Data
         dataloader = DataLoader(list(zip(inp_c, out_c, inp_m, out_m)), batch_size=1, shuffle=False)
 
         # Tune Model
-        unfreeze_model(model)
-        loss = backprop(e, model, optimizer, dataloader)
-        accuracy_list.append(loss)
-        save_model(model, optimizer, e, accuracy_list, args.dataset, f'FCN2_{args.strategy}')
+        if not (PRETRAIN_DINI and USE_PRETRAINED_ONLY):
+            unfreeze_model(model)
+            loss = backprop(e, model, optimizer, dataloader)
+            accuracy_list.append(loss)
+            save_model(model, optimizer, e, accuracy_list, args.dataset, f'FCN2_{args.strategy}')
 
         # Tune Data
         freeze_model(model)
