@@ -1,6 +1,7 @@
 from src.models import *
 from src.utils import *
 from src.folderconstants import *
+from src.adahessian import Adahessian
 import torch
 import numpy as np
 from torch.utils.data import DataLoader
@@ -71,14 +72,14 @@ def backprop(epoch, model, optimizer, dataloader, use_ce=False):
         optimizer.zero_grad(); loss.backward(); optimizer.step()
     return np.mean(ls)
 
-def opt(model, dataloader, use_ce=False):
+def opt(model, dataloader, use_ce=False, use_second_order=False):
     lf = lambda x, y: nn.MSELoss(reduction = 'mean')(x, y) + nn.L1Loss(reduction = 'mean')(x, y)
     lfo = nn.CrossEntropyLoss(reduction = 'mean')
     ls = []; new_inp, new_out = [], []
     for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
         # update input
         inp.requires_grad = True; out.requires_grad = True
-        optimizer = torch.optim.Adam([inp, out] , lr=0.0005)
+        optimizer = torch.optim.Adam([inp, out] , lr=0.0005) if not use_second_order else Adahessian([inp, out], lr=0.001)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
         iteration = 0; equal = 0; z_old = 100
         inp_orig, out_orig = deepcopy(inp.detach().data), deepcopy(out.detach().data)
@@ -86,7 +87,7 @@ def opt(model, dataloader, use_ce=False):
             inp_old = deepcopy(inp.data); out_old = deepcopy(out.data)
             pred_i, pred_o = model(inp, out)
             z =  lf(pred_i, inp) + (lfo(pred_o, out) if use_ce else lf(pred_o, out))
-            optimizer.zero_grad(); z.backward(); optimizer.step(); scheduler.step()
+            optimizer.zero_grad(); z.backward(create_graph=True); optimizer.step(); scheduler.step()
             inp.data, out.data = scale(inp.data), scale(out.data)
             inp.data, out.data = mask(inp.data.detach(), inp_m, inp_orig), mask(out.data.detach(), out_m, out_orig)
             equal = equal + 1 if torch.all(torch.abs(inp_old - inp) < 0.01) and torch.all(torch.abs(out_old - out) < 0.01) else 0
