@@ -231,6 +231,7 @@ if __name__ == '__main__':
         plt.imshow(data)
         plt.savefig(f'./results/model/{dataset}/{corruption}/heatmaps/orig.pdf', bbox_inches='tight')
         # np.save(f'./results/model/{dataset}/{corruption}/heatmaps/orig.npy', data.numpy())
+        # np.save(f'./results/model/{dataset}/{corruption}/heatmaps/corrupt.npy', torch.cat([inp_dini, out_dini], dim=1).numpy())
 
     num_epochs = 1000
 
