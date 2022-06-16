@@ -41,8 +41,9 @@ warnings.filterwarnings('ignore')
 # tqdm.__init__ = partialmethod(tqdm.__init__, disable=True)
 
 
-PRETRAIN_DINI = True
-USE_PRETRAINED_ONLY = True # Can only be True if PRETRAIN_DINI is True
+PRETRAIN_DINI = False
+USE_PRETRAINED_ONLY = False # Can only be True if PRETRAIN_DINI is True
+USE_SECOND_ORDER = True
 
 
 def impute(inp_c, out_c, model):
@@ -295,7 +296,7 @@ if __name__ == '__main__':
 
             tqdm.write(f'Epoch {e},\tLoss = {loss}')
 
-    early_stop_patience, curr_patience, old_loss = 3, 0, np.inf
+    early_stop_patience, curr_patience, old_loss = 5, 0, np.inf
     for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
         # Get Data
         dataloader = DataLoader(list(zip(inp_c, out_c, inp_m, out_m)), batch_size=1, shuffle=False)
@@ -309,7 +310,7 @@ if __name__ == '__main__':
 
         # Tune Data
         freeze_model(model)
-        inp_c, out_c = opt(model, dataloader)
+        inp_c, out_c = opt(model, dataloader, use_second_order=USE_SECOND_ORDER)
         data_c = torch.cat([inp_c, out_c], dim=1)
         tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {lf(data[data_m], data_c[data_m]).item()},\tMAE = {mae(data[data_m].detach().numpy(), data_c[data_m].detach().numpy())}')  
 
