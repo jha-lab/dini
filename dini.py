@@ -13,11 +13,21 @@ from copy import deepcopy
 
 torch.set_printoptions(sci_mode=True)
 
+def sliding_windows(data, seq_length):
+    x = []
+    data_np = data.numpy()
+
+    for i in range(0, len(data_np), seq_length):
+        _x = data_np[i:(i+seq_length), :]
+        x.append(_x)
+
+    return torch.Tensor(np.array(x))
+
 def load_data(dataset):
-    inp = torch.tensor(np.load(f'{output_folder}/{dataset}/inp.npy'))
-    out = torch.tensor(np.load(f'{output_folder}/{dataset}/out.npy'))
-    inp_c = torch.tensor(np.load(f'{output_folder}/{dataset}/inp_c.npy'))
-    out_c = torch.tensor(np.load(f'{output_folder}/{dataset}/out_c.npy'))
+    inp = torch.tensor(np.load(f'{output_folder}/{dataset}/inp.npy')).float()
+    out = torch.tensor(np.load(f'{output_folder}/{dataset}/out.npy')).float()
+    inp_c = torch.tensor(np.load(f'{output_folder}/{dataset}/inp_c.npy')).float()
+    out_c = torch.tensor(np.load(f'{output_folder}/{dataset}/out_c.npy')).float()
     return inp, out, inp_c, out_c
 
 def init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero'):
@@ -29,14 +39,14 @@ def init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero'):
         inp_r, out_r = torch.Tensor(SimpleFill().fit_transform(inp_c)), torch.Tensor(SimpleFill().fit_transform(out_c))
     else:
         raise NotImplementedError()
-    inp_r, out_r = inp_r.double(), out_r.double()
+    inp_r, out_r = inp_r, out_r
     inp_c[inp_m], out_c[out_m] = inp_r[inp_m], out_r[out_m]
     return inp_c, out_c
 
 def load_model(modelname, inp, out, dataset, retrain, test):
     import src.models
     model_class = getattr(src.models, modelname)
-    model = model_class(inp.shape[1], out.shape[1], 512).double()
+    model = model_class(inp.shape[1], out.shape[1], 512)
     optimizer = torch.optim.Adam(model.parameters() , lr=0.0001, weight_decay=1e-3)
     fname = f'{checkpoints_folder}/{dataset}/{modelname}.ckpt'
     if os.path.exists(fname) and (not retrain or test):
@@ -66,7 +76,7 @@ def backprop(epoch, model, optimizer, dataloader, use_ce=False):
     lfo = nn.CrossEntropyLoss(reduction = 'mean')
     ls = []
     for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
-        pred_i, pred_o = model(inp, out)
+        pred_i, pred_o = model(inp.float(), out.float())
         loss = lf(pred_i, inp) + (lfo(pred_o, out) if use_ce else lf(pred_o, out))
         ls.append(loss.item())   
         optimizer.zero_grad(); loss.backward(); optimizer.step()
@@ -132,7 +142,10 @@ if __name__ == '__main__':
 
     for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
         # Get Data
-        dataloader = DataLoader(list(zip(inp_c, out_c, inp_m, out_m)), batch_size=1, shuffle=False)
+        if model.name.startswith('FCN'):
+            dataloader = DataLoader(list(zip(inp_c, out_c, inp_m, out_m)), batch_size=1, shuffle=False)
+        elif model.name.startswith('LSTM'):
+            dataloader = DataLoader(list(zip(sliding_windows(inp_c, 5), sliding_windows(out_c, 5), sliding_windows(inp_m, 5), sliding_windows(out_m, 5))), batch_size=1, shuffle=False)
 
         # Tune Model
         unfreeze_model(model)
@@ -142,7 +155,12 @@ if __name__ == '__main__':
 
         # Tune Data
         freeze_model(model)
-        inp_c, out_c = forward_opt(model, dataloader)
+        inp_c, out_c = opt(model, dataloader)
+        
+        if model.name.startswith('LSTM'):
+            inp_c = inp_c.view(-1, inp_c.shape[-1])
+            out_c = out_c.view(-1, out_c.shape[-1])
+
         data_c = torch.cat([inp_c, out_c], dim=1)
         tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {lf(data[data_m], data_c[data_m]).item()},\tMAE = {mae(data[data_m].detach().numpy(), data_c[data_m].detach().numpy())}')  
     
