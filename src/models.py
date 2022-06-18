@@ -42,3 +42,26 @@ class FCN2(nn.Module):
         out2 = 2 * self.fcn(inp) - 0.5
         inp2 = 2 * self.fcn_reverse(out) - 0.5
         return inp2, out2
+
+class LSTM2(nn.Module):
+    def __init__(self, inp_size, out_size, n_hidden):
+        super(LSTM2, self).__init__()
+        self.name = 'LSTM2'
+        self.hidden_size = n_hidden
+        self.inp_size = inp_size
+        self.out_size = out_size
+        self.lstm = nn.LSTM(input_size=self.inp_size,
+            hidden_size=self.hidden_size,
+            proj_size=self.out_size,
+            # bidirectional=True,
+            batch_first=True)
+        self.lstm_reverse = nn.LSTM(input_size=self.out_size,
+            hidden_size=self.hidden_size,
+            proj_size=self.inp_size,
+            # bidirectional=True,
+            batch_first=True)
+
+    def forward(self, inp, out):
+        out2, _ = self.lstm(inp)
+        inp2, _ = self.lstm_reverse(out)
+        return inp2, out2
