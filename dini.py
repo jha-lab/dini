@@ -144,7 +144,7 @@ if __name__ == '__main__':
         # Get Data
         if model.name.startswith('FCN'):
             dataloader = DataLoader(list(zip(inp_c, out_c, inp_m, out_m)), batch_size=1, shuffle=False)
-        elif model.name.startswith('LSTM'):
+        else:
             dataloader = DataLoader(list(zip(sliding_windows(inp_c, 5), sliding_windows(out_c, 5), sliding_windows(inp_m, 5), sliding_windows(out_m, 5))), batch_size=1, shuffle=False)
 
         # Tune Model
@@ -157,7 +157,7 @@ if __name__ == '__main__':
         freeze_model(model)
         inp_c, out_c = opt(model, dataloader)
         
-        if model.name.startswith('LSTM'):
+        if not model.name.startswith('FCN'):
             inp_c = inp_c.view(-1, inp_c.shape[-1])
             out_c = out_c.view(-1, out_c.shape[-1])
 
