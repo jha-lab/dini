@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import math
 
 class FCN(nn.Module):
     def __init__(self, inp_size, out_size, n_hidden):
@@ -67,12 +68,15 @@ class LSTM2(nn.Module):
         return inp2, out2
 
 class TXF2(nn.Module):
-    def __init__(self, inp_size, out_size, n_hidden):
+    def __init__(self, inp_size, out_size, n_hidden, use_pos_emb=False):
         super(TXF2, self).__init__()
         self.name = 'TXF2'
         self.hidden_size = n_hidden
         self.inp_size = inp_size
         self.out_size = out_size
+        self.pos_emb = nn.Linear(self.inp_size, self.inp_size)
+        self.pos_emb_reverse = nn.Linear(self.out_size, self.out_size)
+        self.use_pos_emb = use_pos_emb
         self.txf = nn.Sequential(
             nn.TransformerEncoderLayer(d_model=self.inp_size,
                 nhead=1,
@@ -89,6 +93,9 @@ class TXF2(nn.Module):
             )
 
     def forward(self, inp, out):
+        if self.use_pos_emb:
+            inp = inp + self.pos_emb(inp)
+            out = out + self.pos_emb_reverse(out)
         out2 = self.txf(inp)
         inp2 = self.txf_reverse(out)
         return inp2, out2
