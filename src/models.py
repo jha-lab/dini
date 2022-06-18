@@ -65,3 +65,30 @@ class LSTM2(nn.Module):
         out2, _ = self.lstm(inp)
         inp2, _ = self.lstm_reverse(out)
         return inp2, out2
+
+class TXF2(nn.Module):
+    def __init__(self, inp_size, out_size, n_hidden):
+        super(TXF2, self).__init__()
+        self.name = 'TXF2'
+        self.hidden_size = n_hidden
+        self.inp_size = inp_size
+        self.out_size = out_size
+        self.txf = nn.Sequential(
+            nn.TransformerEncoderLayer(d_model=self.inp_size,
+                nhead=1,
+                dim_feedforward=self.hidden_size,
+                batch_first=True),
+            nn.Linear(self.inp_size, self.out_size)
+            )
+        self.txf_reverse = nn.Sequential(
+            nn.TransformerEncoderLayer(d_model=self.out_size,
+                nhead=1,
+                dim_feedforward=self.hidden_size,
+                batch_first=True),
+            nn.Linear(self.out_size, self.inp_size)
+            )
+
+    def forward(self, inp, out):
+        out2 = self.txf(inp)
+        inp2 = self.txf_reverse(out)
+        return inp2, out2
