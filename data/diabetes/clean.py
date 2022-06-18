@@ -3,7 +3,7 @@ import numpy as np
 import os
 
 
-# Dataset source: https://www.kaggle.com/datasets/usdot/flight-delays?select=flights.csv
+# Dataset source: https://www4.stat.ncsu.edu/~boos/var.select/diabetes.html
 
 # Read csv file
 
