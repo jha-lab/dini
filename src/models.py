@@ -5,7 +5,7 @@ import torch.optim as optim
 import math
 
 class FCN(nn.Module):
-    def __init__(self, inp_size, out_size, n_hidden):
+    def __init__(self, inp_size, out_size, n_hidden, mc_dropout=False):
         super(FCN, self).__init__()
         self.name = 'FCN'
         self.n_hidden = n_hidden
@@ -14,6 +14,7 @@ class FCN(nn.Module):
         self.fcn = nn.Sequential(
             nn.Flatten(),
             nn.Linear(self.n_inp, self.n_hidden), nn.LeakyReLU(True),
+            nn.Dropout(0.1 if mc_dropout else 0),
             nn.Linear(self.n_hidden, self.n_out), nn.Sigmoid(),
         )
 
@@ -22,7 +23,7 @@ class FCN(nn.Module):
         return inp, out2
 
 class FCN2(nn.Module):
-    def __init__(self, inp_size, out_size, n_hidden):
+    def __init__(self, inp_size, out_size, n_hidden, mc_dropout=False):
         super(FCN2, self).__init__()
         self.name = 'FCN2'
         self.n_hidden = n_hidden
@@ -31,11 +32,13 @@ class FCN2(nn.Module):
         self.fcn = nn.Sequential(
             nn.Flatten(),
             nn.Linear(self.n_inp, self.n_hidden), nn.LeakyReLU(True),
+            nn.Dropout(0.1 if mc_dropout else 0),
             nn.Linear(self.n_hidden, self.n_out), nn.Sigmoid(),
         )
         self.fcn_reverse = nn.Sequential(
             nn.Flatten(),
             nn.Linear(self.n_out, self.n_hidden), nn.LeakyReLU(True),
+            nn.Dropout(0.1 if mc_dropout else 0),
             nn.Linear(self.n_hidden, self.n_inp), nn.Sigmoid(),
         )
 
