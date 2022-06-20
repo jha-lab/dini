@@ -43,10 +43,14 @@ def init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero'):
     inp_c[inp_m], out_c[out_m] = inp_r[inp_m], out_r[out_m]
     return inp_c, out_c
 
-def load_model(modelname, inp, out, dataset, retrain, test):
+def load_model(modelname, inp, out, dataset, retrain, test, model_unc=False):
     import src.models
     model_class = getattr(src.models, modelname)
-    model = model_class(inp.shape[1], out.shape[1], 512)
+    if modelname.startswith('FCN'):
+        model = model_class(inp.shape[1], out.shape[1], 512, mc_dropout=model_unc)    
+    else:
+        if model_unc == True: print(f'Uncertainty modeling currently only supported for FCN models')
+        model = model_class(inp.shape[1], out.shape[1], 512)
     optimizer = torch.optim.Adam(model.parameters() , lr=0.0001, weight_decay=1e-3)
     fname = f'{checkpoints_folder}/{dataset}/{modelname}.ckpt'
     if os.path.exists(fname) and (not retrain or test):
@@ -85,7 +89,7 @@ def backprop(epoch, model, optimizer, dataloader, use_ce=False):
 def opt(model, dataloader, use_ce=False, use_second_order=False):
     lf = lambda x, y: nn.MSELoss(reduction = 'mean')(x, y) + nn.L1Loss(reduction = 'mean')(x, y)
     lfo = nn.CrossEntropyLoss(reduction = 'mean')
-    ls = []; new_inp, new_out = [], []
+    ls = []; new_inp, new_out = [], []; inp_std, out_std = [], []
     for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
         # update input
         inp.requires_grad = True; out.requires_grad = True
@@ -106,7 +110,14 @@ def opt(model, dataloader, use_ce=False, use_second_order=False):
         ls.append(z.item())
         inp.requires_grad = False; out.requires_grad = False
         new_inp.append(inp); new_out.append(out)
-    return torch.cat(new_inp), torch.cat(new_out)
+
+        # get std for imputed input
+        pred_i_list, pred_o_list = [], []
+        for _ in range(10):
+            pred_i, pred_o = model(inp, out)
+            pred_i_list.append(pred_i); pred_o_list.append(pred_o)
+        inp_std.append(torch.std(torch.stack(pred_i_list).squeeze(), dim=0, keepdim=True)); out_std.append(torch.std(torch.stack(pred_o_list).squeeze(), dim=0, keepdim=True))
+    return torch.cat(new_inp), torch.cat(new_out), torch.cat(inp_std), torch.cat(out_std)
 
 def forward_opt(model, dataloader):
     new_inp, new_out = [], []
@@ -133,7 +144,8 @@ if __name__ == '__main__':
     inp_m, out_m = torch.isnan(inp_c), torch.isnan(out_c)
     inp_m2, out_m2 = torch.logical_not(inp_m), torch.logical_not(out_m)
     inp_c, out_c = init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero')
-    model, optimizer, epoch, accuracy_list = load_model(args.model, inp, out, args.dataset, args.retrain, args.test)
+    model, optimizer, epoch, accuracy_list = load_model(args.model, inp, out, args.dataset, args.retrain, args.test, args.model_unc)
+    model.train()
     data_c = torch.cat([inp_c, out_c], dim=1)
     data_m = torch.cat([inp_m, out_m], dim=1)
     data = torch.cat([inp, out], dim=1)
@@ -155,12 +167,12 @@ if __name__ == '__main__':
 
         # Tune Data
         freeze_model(model)
-        inp_c, out_c = opt(model, dataloader)
+        inp_c, out_c, inp_std, out_std = opt(model, dataloader)
         
         if not model.name.startswith('FCN'):
             inp_c = inp_c.view(-1, inp_c.shape[-1])
             out_c = out_c.view(-1, out_c.shape[-1])
 
         data_c = torch.cat([inp_c, out_c], dim=1)
-        tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {lf(data[data_m], data_c[data_m]).item()},\tMAE = {mae(data[data_m].detach().numpy(), data_c[data_m].detach().numpy())}')  
+        tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {lf(data[data_m], data_c[data_m]).item()},\tMAE = {mae(data[data_m].detach().numpy(), data_c[data_m].detach().numpy())}\tMax unc. = ({float(torch.amax(inp_std).detach().numpy()) : 0.5f}, {float(torch.amax(out_std).detach().numpy()) : 0.5f})')  
     
