@@ -22,4 +22,10 @@ parser.add_argument('--retrain',
 parser.add_argument('--model_unc', 
 					action='store_true', 
 					help="retrain the model")
+parser.add_argument('--impute_fraction', 
+					metavar='-f', 
+					type=float, 
+					required=False,
+					default=1,
+                    help="fraction of data to impute based on uncertainty")
 args = parser.parse_args()
