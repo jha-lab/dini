@@ -10,6 +10,7 @@ from sklearn.metrics import mean_squared_error as mse
 from sklearn.metrics import mean_absolute_error as mae
 from tqdm import tqdm
 from copy import deepcopy
+import sys
 
 torch.set_printoptions(sci_mode=True)
 
@@ -17,7 +18,7 @@ def sliding_windows(data, seq_length):
     x = []
     data_np = data.numpy()
 
-    for i in range(0, len(data_np), seq_length):
+    for i in range(0, data_np.shape[0], seq_length):
         _x = data_np[i:(i+seq_length), :]
         x.append(_x)
 
@@ -86,10 +87,10 @@ def backprop(epoch, model, optimizer, dataloader, use_ce=False):
         optimizer.zero_grad(); loss.backward(); optimizer.step()
     return np.mean(ls)
 
-def opt(model, dataloader, use_ce=False, use_second_order=False):
+def opt(model, dataloader, use_ce=False, use_second_order=False, impute_fraction=0.5):
     lf = lambda x, y: nn.MSELoss(reduction = 'mean')(x, y) + nn.L1Loss(reduction = 'mean')(x, y)
     lfo = nn.CrossEntropyLoss(reduction = 'mean')
-    ls = []; new_inp, new_out = [], []; inp_std, out_std = [], []
+    ls = []; inp_list, out_list = [], []; inp_std_list, out_std_list = [], []
     for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
         # update input
         inp.requires_grad = True; out.requires_grad = True
@@ -109,15 +110,23 @@ def opt(model, dataloader, use_ce=False, use_second_order=False):
             iteration += 1; z_old = z.item()
         ls.append(z.item())
         inp.requires_grad = False; out.requires_grad = False
-        new_inp.append(inp); new_out.append(out)
 
         # get std for imputed input
         pred_i_list, pred_o_list = [], []
         for _ in range(10):
             pred_i, pred_o = model(inp, out)
             pred_i_list.append(pred_i); pred_o_list.append(pred_o)
-        inp_std.append(torch.std(torch.stack(pred_i_list).squeeze(), dim=0, keepdim=True)); out_std.append(torch.std(torch.stack(pred_o_list).squeeze(), dim=0, keepdim=True))
-    return torch.cat(new_inp), torch.cat(new_out), torch.cat(inp_std), torch.cat(out_std)
+        inp_std = torch.std(torch.stack(pred_i_list).squeeze(), dim=0, keepdim=True); out_std = torch.std(torch.stack(pred_o_list).squeeze(), dim=0, keepdim=True)
+        inp_std_list.append(inp_std); out_std_list.append(out_std)
+
+        # impute fraction of data based on std
+        if impute_fraction == 1:
+            inp_list.append(inp); out_list.append(out)
+        else:
+            inp_std_thresh, out_std_thresh = torch.quantile(inp_std, min(impute_fraction, 1)), torch.quantile(out_std, min(impute_fraction, 1))
+            inp.data, out.data = mask(inp.data.detach(), (inp_std<inp_std_thresh), inp_orig), mask(out.data.detach(), (out_std<out_std_thresh), out_orig)
+            inp_list.append(inp); out_list.append(out)
+    return torch.cat(inp_list), torch.cat(out_list), torch.cat(inp_std_list), torch.cat(out_std_list)
 
 def forward_opt(model, dataloader):
     new_inp, new_out = [], []
@@ -141,11 +150,17 @@ if __name__ == '__main__':
     lf = nn.MSELoss(reduction = 'mean')
 
     inp, out, inp_c, out_c = load_data(args.dataset)
+    model, optimizer, epoch, accuracy_list = load_model(args.model, inp, out, args.dataset, args.retrain, args.test, args.model_unc)
+    model.train()
+    print(f'Number of model parameters: {model.num_params()}')
+
+    if not model.name.startswith('FCN'):
+        trunc_shape = inp.shape[0] - (inp.shape[0] % 5)
+        inp, out, inp_c, out_c = inp[:trunc_shape, :], out[:trunc_shape, :], inp_c[:trunc_shape, :], out_c[:trunc_shape, :]
     inp_m, out_m = torch.isnan(inp_c), torch.isnan(out_c)
     inp_m2, out_m2 = torch.logical_not(inp_m), torch.logical_not(out_m)
     inp_c, out_c = init_impute(inp_c, out_c, inp_m, out_m, strategy = 'zero')
-    model, optimizer, epoch, accuracy_list = load_model(args.model, inp, out, args.dataset, args.retrain, args.test, args.model_unc)
-    model.train()
+    
     data_c = torch.cat([inp_c, out_c], dim=1)
     data_m = torch.cat([inp_m, out_m], dim=1)
     data = torch.cat([inp, out], dim=1)
@@ -167,7 +182,7 @@ if __name__ == '__main__':
 
         # Tune Data
         freeze_model(model)
-        inp_c, out_c, inp_std, out_std = opt(model, dataloader)
+        inp_c, out_c, inp_std, out_std = opt(model, dataloader, impute_fraction=args.impute_fraction + (0 if args.impute_fraction == 1 else (1-args.impute_fraction)*(e/num_epochs)))
         
         if not model.name.startswith('FCN'):
             inp_c = inp_c.view(-1, inp_c.shape[-1])
