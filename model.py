@@ -95,7 +95,7 @@ def train_fcn(inp_imp, out_imp, inp_train, out_train, inp_test, out_test, num_ep
     y_pred, y_true = [], []
     test_dataloader = DataLoader(list(zip(inp_test, out_test)), batch_size=1, shuffle=False)
     for inp, out in tqdm(test_dataloader, leave=False, ncols=80):
-        pred_i, pred_o = model(inp, torch.zeros_like(out))
+        pred_i, pred_o = model(inp.float(), torch.zeros_like(out).float())
         if out.shape[1] > 1:
             y_pred.append(np.argmax(pred_o.detach().numpy()))
             y_true.append(np.argmax(out))
@@ -121,7 +121,7 @@ if __name__ == '__main__':
                         type=str, 
                         required=False,
                         default='cps_wdt',
-                        help="dataset from ['cps_wdt', 'gas', 'swat', 'covid']")
+                        help="dataset from ['gas', 'swat', 'coviddeep', 'covid_cxr']")
     parser.add_argument('--strategy', 
                         metavar='-s', 
                         type=str, 
@@ -144,7 +144,7 @@ if __name__ == '__main__':
     folder = os.path.join(output_folder, dataset)
     os.makedirs(folder, exist_ok=True)
     data_file = f'{data_folder}/{dataset}/data.csv'
-    df = pd.read_csv(data_file, index_col=0)
+    df = pd.read_csv(data_file, index_col=0 if dataset != 'covid_cxr' else None)
     assert not np.any(np.isnan(df.values))
     df = normalize(df)
 
@@ -153,8 +153,10 @@ if __name__ == '__main__':
             df = pd.concat([df.loc[df['Gas'] == i].sample(500, random_state=0) for i in [0, 1]])
         elif dataset == 'swat':
             df = pd.concat([df.loc[df['Normal/Attack'] == i].sample(100, random_state=0) for i in [0, 1]])
-        elif dataset == 'covid':
+        elif dataset == 'coviddeep':
             df = pd.concat([df.loc[df['4163'] == i].sample(500, random_state=0) for i in [0, 1]])
+        elif dataset == 'covid_cxr':
+            df = pd.concat([df.loc[df['512'] == i].sample(500, random_state=0, replace=True) for i in [0, 1]])
         df = df.sample(frac=1, random_state=0) # remove random_state=0 for CI bounds
     else:
         df = df.sample(frac=0.01, random_state=0) # randomize dataset
@@ -182,8 +184,8 @@ if __name__ == '__main__':
         raise NotImplementedError()
 
     label_idx = -1
-    inp_train, out_train = torch.tensor(df_train.values[:, :label_idx]), torch.tensor(df_train.values[:, label_idx:])
-    inp_val, out_val = torch.tensor(df_val.values[:, :label_idx]), torch.tensor(df_val.values[:, label_idx:])
+    inp_train, out_train = torch.tensor(df_train.values[:, :label_idx]).float(), torch.tensor(df_train.values[:, label_idx:]).float()
+    inp_val, out_val = torch.tensor(df_val.values[:, :label_idx]).float(), torch.tensor(df_val.values[:, label_idx:]).float()
     inp_c, out_c = torch.tensor(corrupt_df.values[:, :label_idx]), torch.tensor(corrupt_df.values[:, label_idx:])
     inp_test, out_test = torch.tensor(df_test.values[:, :label_idx]), torch.tensor(df_test.values[:, label_idx:])
 
@@ -216,11 +218,11 @@ if __name__ == '__main__':
         plt.savefig(f'./results/model/{dataset}/{corruption}/cms/unc.pdf', bbox_inches='tight')
 
     # Run DINI
-    inp_dini, out_dini = torch.cat((inp_train, inp_c)).double(), torch.cat((out_train, out_c)).double()
+    inp_dini, out_dini = torch.cat((inp_train, inp_c)), torch.cat((out_train, out_c))
     inp_m, out_m = torch.isnan(inp_dini), torch.isnan(out_dini)
     inp_m2, out_m2 = torch.logical_not(inp_m), torch.logical_not(out_m)
     inp_imp, out_imp = init_impute_sep(inp_dini, out_dini, inp_m, out_m, strategy = 'zero')
-    inp_imp, out_imp = inp_imp.double(), out_imp.double()
+    inp_imp, out_imp = inp_imp.float(), out_imp.float()
     model, optimizer, epoch, accuracy_list = load_model('FCN2', inp_dini, out_dini, dataset, True, False)
     data_imp = torch.cat([inp_imp, out_imp], dim=1)
     data_m = torch.cat([inp_m, out_m], dim=1)
@@ -233,13 +235,13 @@ if __name__ == '__main__':
         # np.save(f'./results/model/{dataset}/{corruption}/heatmaps/orig.npy', data.numpy())
         # np.save(f'./results/model/{dataset}/{corruption}/heatmaps/corrupt.npy', torch.cat([inp_dini, out_dini], dim=1).numpy())
 
-    num_epochs = 1000
+    num_epochs = 10
 
     ls = []
     early_stop_patience, curr_patience, old_loss = 5, 0, np.inf
     for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
         # Get Data
-        dataloader = DataLoader(list(zip(inp_imp, out_imp, inp_m, out_m)), batch_size=64, shuffle=False)
+        dataloader = DataLoader(list(zip(inp_imp, out_imp, inp_m, out_m)), batch_size=1, shuffle=False)
 
         # Tune Model
         unfreeze_model(model)
@@ -249,7 +251,7 @@ if __name__ == '__main__':
 
         # Tune Data
         freeze_model(model)
-        inp_imp, out_imp = opt(model, dataloader)
+        inp_imp, out_imp, _, _ = opt(model, dataloader)
         data_imp = torch.cat([inp_imp, out_imp], dim=1)
         if VERBOSE: tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {mse(data[data_m].detach().numpy(), data_imp[data_m].detach().numpy())},\tMAE = {mae(data[data_m].detach().numpy(), data_imp[data_m].detach().numpy())}')  
 
@@ -292,14 +294,14 @@ if __name__ == '__main__':
         plt.savefig(f'./results/model/{dataset}/{corruption}/cms/dini.pdf', bbox_inches='tight')
 
     # Run simple FCN on data imputed by baseline imputation methods
-    baseline_models = ['median', 'knn', 'svd', 'mice', 'spectral', 'matrix', 'gmm', 'gain']
+    baseline_models = ['median', 'knn', 'svd', 'mice', 'spectral', 'matrix', 'gain']
     for model in baseline_models:
         data_imp_base = torch.Tensor(impute(inp_c, out_c, model))
         data_imp_base_m = np.isnan(data_imp_base.numpy())
         data_imp_base = torch.Tensor(init_impute_all(data_imp_base.numpy(), data_imp_base_m, strategy = 'zero'))
         data_base = data_imp_base.double()
         inp_base, out_base = data_base[:, :label_idx], data_base[:, label_idx:]
-        inp_base, out_base = torch.cat([inp_train, inp_base]), torch.cat([out_train, out_base])
+        inp_base, out_base = torch.cat([inp_train, inp_base]).float(), torch.cat([out_train, out_base]).float()
         data_base = torch.cat([inp_base, out_base], dim=1)
 
         if PLOT_RESULTS:
