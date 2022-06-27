@@ -77,7 +77,7 @@ def save_model(model, optimizer, epoch, accuracy_list, dataset, modelname):
         'accuracy_list': accuracy_list}, file_path)
 
 def backprop(epoch, model, optimizer, dataloader, use_ce=False):
-    lf = lambda x, y: nn.MSELoss(reduction = 'mean')(x, y) + nn.L1Loss(reduction = 'mean')(x, y)
+    lf = lambda x, y: torch.sqrt(nn.MSELoss(reduction = 'mean')(x, y)) + nn.L1Loss(reduction = 'mean')(x, y)
     lfo = nn.CrossEntropyLoss(reduction = 'mean')
     ls = []
     for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
@@ -87,8 +87,8 @@ def backprop(epoch, model, optimizer, dataloader, use_ce=False):
         optimizer.zero_grad(); loss.backward(); optimizer.step()
     return np.mean(ls)
 
-def opt(model, dataloader, use_ce=False, use_second_order=False, impute_fraction=0.5):
-    lf = lambda x, y: nn.MSELoss(reduction = 'mean')(x, y) + nn.L1Loss(reduction = 'mean')(x, y)
+def opt(model, dataloader, use_ce=False, use_second_order=False, impute_fraction=1):
+    lf = lambda x, y: torch.sqrt(nn.MSELoss(reduction = 'mean')(x, y)) + nn.L1Loss(reduction = 'mean')(x, y)
     lfo = nn.CrossEntropyLoss(reduction = 'mean')
     ls = []; inp_list, out_list = [], []; inp_std_list, out_std_list = [], []
     for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
