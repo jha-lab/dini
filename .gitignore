@@ -8,7 +8,7 @@ data/gas/ethylene_CO.txt
 data/gas/ethylene_methane.txt
 data/swat/SWaT_Dataset_Attack_v0.csv
 data/swat/data.csv
-data/coviddeep/data.csv
+data/coviddeep/
 data/covid_cxr/train/
 data/covid_cxr/test/
 heatmaps/
