@@ -1,0 +1,21 @@
+name: dini
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - scikit-optimize
+  - ipywidgets
+  - tqdm
+  - matplotlib
+  - scipy
+  - cython
+  - pyyaml
+  - pandas
+  - fancyimpute
+  - torchaudio
+  - torchvision
+  - pytorch
+  - cudatoolkit=11.1
+  - pyg
+  - cleanlab
