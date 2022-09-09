@@ -11,6 +11,15 @@ data/swat/data.csv
 data/coviddeep/
 data/covid_cxr/train/
 data/covid_cxr/test/
+data/MSDS/
+data/accelerometer/
+data/air_quality/
+data/concrete/
+data/cps_wdt/
+data/housing/
+data/linear/
+data/naval/
+data/traffic/
 heatmaps/
 cms/
 results/
