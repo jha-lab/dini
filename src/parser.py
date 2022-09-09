@@ -1,18 +1,18 @@
 import argparse
 
-parser = argparse.ArgumentParser(description='Time-Series Anomaly Detection')
+parser = argparse.ArgumentParser(description='DINI')
 parser.add_argument('--dataset', 
 					metavar='-d', 
 					type=str, 
 					required=False,
-					default='MSDS',
-                    help="dataset from ['MSDS']")
+					default='breast',
+                    help="dataset from ['breast', 'diabetes', 'diamonds', 'energy', 'flights', 'yacht']")
 parser.add_argument('--model', 
 					metavar='-m', 
 					type=str, 
 					required=False,
 					default='FCN2',
-                    help="model name from ['FCN', 'FCN2']")
+                    help="model name from ['FCN', 'FCN2', 'LSTM2', 'TXF2']")
 parser.add_argument('--test', 
 					action='store_true', 
 					help="test the model")
