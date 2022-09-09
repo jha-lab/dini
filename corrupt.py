@@ -103,48 +103,22 @@ def process(dataset, corruption, fraction = 0.1):
 	else:
 		raise NotImplementedError()
 	if VISUALIZE: visualize(corrupt_df, dataset, corruption, fraction)
-	if dataset == 'MSDS':
+	if dataset == 'breast':
 		def split(df):
-			inp_col = [col for col in df.columns if 'cpu' in col]
-			out_col = [col for col in df.columns if 'mem' in col]
-			return df[inp_col].values, df[out_col].values
-	elif dataset == 'concrete':
-		def split(df):
-			return df.iloc[:, :-1].values, df.iloc[:, -1].values.reshape(-1, 1)
-	elif dataset == 'energy':
-		def split(df):
-			return df.iloc[:, :-2].values, df.iloc[:, -2:].values
-	elif dataset == 'housing':
-		def split(df):
-			return df.iloc[:, :-1].values, df.iloc[:, -1].values.reshape(-1, 1)
-	elif dataset == 'naval':
-		def split(df):
-			return df.iloc[:, :-2].values, df.iloc[:, -2:].values
+			return df.iloc[:, :-1].values, df.iloc[:, -1:].values.reshape(-1, 1)
 	elif dataset == 'diabetes':
 		def split(df):
 			return df.iloc[:, :-7].values, df.iloc[:, -7:].values
-	elif dataset == 'accelerometer':
-		def split(df):
-			return df.iloc[:, 0:2].values, df.iloc[:, 2:].values
-	elif dataset == 'air_quality':
-		def split(df):
-			return df.iloc[:, 0:-3].values, df.iloc[:, -3:].values
-	elif dataset == 'linear':
-		def split(df):
-			return df.iloc[:, :-5].values, df.iloc[:, -5:].values
 	elif dataset == 'diamonds':
+		def split(df):
+			return df.iloc[:, :-2].values, df.iloc[:, -2:].values
+	elif dataset == 'energy':
 		def split(df):
 			return df.iloc[:, :-2].values, df.iloc[:, -2:].values
 	elif dataset == 'flights':
 		def split(df):
 			return df.iloc[:, :-5].values, df.iloc[:, -5:].values
-	elif dataset == 'traffic':
-		def split(df):
-			return df.iloc[:, :-1].values, df.iloc[:, -1:].values.reshape(-1, 1)
 	elif dataset == 'yacht':
-		def split(df):
-			return df.iloc[:, :-1].values, df.iloc[:, -1:].values.reshape(-1, 1)
-	elif dataset == 'breast':
 		def split(df):
 			return df.iloc[:, :-1].values, df.iloc[:, -1:].values.reshape(-1, 1)
 	elif dataset == 'gas':
