@@ -40,7 +40,7 @@ conda env create --file setup/environment.yaml
 conda activate dini
 ```
 
-## Result reproduction
+## Replicating results
 
 To generate corrupt data:
 ```python
