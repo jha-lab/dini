@@ -133,7 +133,7 @@ if __name__ == '__main__':
                         type=float,
                         required=False,
                         default=1,
-                        help="fraction of data to corrupt; should be less than 1")
+                        help="fraction of validation data to corrupt; should be less than 1")
     args = parser.parse_args()
 
     np.random.seed(0)
