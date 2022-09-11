@@ -10,6 +10,7 @@ from tqdm import tqdm
 import sys
 from matplotlib import pyplot as plt
 import argparse
+from src.utils import *
 
 
 def modify_data(y, frac=0.1):
@@ -82,7 +83,7 @@ def main(args):
     epoch = -1; num_epochs = 100
 
     dataloader = DataLoader(list(zip(X, y.astype(float).reshape(-1, 1))), batch_size=1, shuffle=False)
-    lf = lambda x, y: torch.sqrt(nn.MSELoss(reduction = 'mean')(x, y)) + nn.L1Loss(reduction = 'mean')(x, y)
+    lf = lambda x, y: torch.sqrt(nn.MSELoss(reduction = 'mean')(x, y) + torch.finfo(torch.float32).eps) + nn.L1Loss(reduction = 'mean')(x, y)
     lfo = nn.BCELoss(reduction = 'mean')
     use_ce = True
 
@@ -92,6 +93,7 @@ def main(args):
         ls = []
         for inp, out in tqdm(dataloader, leave=False, ncols=80):
             pred_i, pred_o = model(inp.float(), out.float())
+            pred_i, pred_o = scale(pred_i), scale(pred_o)
             loss = lfo(pred_o.float(), out.float()) if use_ce else lf(pred_o.float(), out.float())
             ls.append(loss.item())   
             optimizer.zero_grad(); loss.backward(); optimizer.step()
