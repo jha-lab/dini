@@ -12,6 +12,9 @@ from tqdm import tqdm
 from copy import deepcopy
 import sys
 
+import warnings
+warnings.filterwarnings("ignore")
+
 torch.set_printoptions(sci_mode=True)
 
 def sliding_windows(data, seq_length):
@@ -88,7 +91,7 @@ def backprop(epoch, model, optimizer, dataloader, use_ce=False):
     return np.mean(ls)
 
 def opt(model, dataloader, use_ce=False, use_second_order=False, impute_fraction=1):
-    lf = lambda x, y: torch.sqrt(nn.MSELoss(reduction = 'mean')(x, y)) + nn.L1Loss(reduction = 'mean')(x, y)
+    lf = lambda x, y: torch.sqrt(nn.MSELoss(reduction = 'mean')(x, y) + torch.finfo(torch.float32).eps) + nn.L1Loss(reduction = 'mean')(x, y)
     lfo = nn.CrossEntropyLoss(reduction = 'mean')
     ls = []; inp_list, out_list = [], []; inp_std_list, out_std_list = [], []
     for inp, out, inp_m, out_m in tqdm(dataloader, leave=False, ncols=80):
@@ -103,6 +106,8 @@ def opt(model, dataloader, use_ce=False, use_second_order=False, impute_fraction
             pred_i, pred_o = model(inp, out)
             z =  lf(pred_i, inp) + (lfo(pred_o, out) if use_ce else lf(pred_o, out))
             optimizer.zero_grad(); z.backward(create_graph=True); optimizer.step(); scheduler.step()
+            assert not torch.any(torch.isnan(inp.data))
+            assert not torch.any(torch.isnan(out.data))
             inp.data, out.data = scale(inp.data), scale(out.data)
             inp.data, out.data = mask(inp.data.detach(), inp_m, inp_orig), mask(out.data.detach(), out_m, out_orig)
             equal = equal + 1 if torch.all(torch.abs(inp_old - inp) < 0.01) and torch.all(torch.abs(out_old - out) < 0.01) else 0
@@ -147,7 +152,7 @@ def forward_opt(model, dataloader):
 if __name__ == '__main__':
     from src.parser import *
     num_epochs = 100 if not args.test else 0
-    lf = nn.MSELoss(reduction = 'mean')
+    lf = lambda x, y: torch.sqrt(nn.MSELoss(reduction = 'mean')(x, y) + torch.finfo(torch.float32).eps)
 
     inp, out, inp_c, out_c = load_data(args.dataset)
     model, optimizer, epoch, accuracy_list = load_model(args.model, inp, out, args.dataset, args.retrain, args.test, args.model_unc)
@@ -165,7 +170,7 @@ if __name__ == '__main__':
     data_m = torch.cat([inp_m, out_m], dim=1)
     data = torch.cat([inp, out], dim=1)
 
-    print('Starting MSE', lf(data[data_m], data_c[data_m]).item()) 
+    print('Starting RMSE', lf(data[data_m], data_c[data_m]).item()) 
 
     for e in tqdm(list(range(epoch+1, epoch+num_epochs+1)), ncols=80):
         # Get Data
@@ -189,5 +194,5 @@ if __name__ == '__main__':
             out_c = out_c.view(-1, out_c.shape[-1])
 
         data_c = torch.cat([inp_c, out_c], dim=1)
-        tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {lf(data[data_m], data_c[data_m]).item()},\tMAE = {mae(data[data_m].detach().numpy(), data_c[data_m].detach().numpy())}\tMax unc. = ({float(torch.amax(inp_std).detach().numpy()) : 0.5f}, {float(torch.amax(out_std).detach().numpy()) : 0.5f})')  
+        tqdm.write(f'Epoch {e},\tLoss = {loss : 0.5f},\tRMSE = {lf(data[data_m], data_c[data_m]).item() : 0.5f},\tMAE = {mae(data[data_m].detach().numpy(), data_c[data_m].detach().numpy()) : 0.5f}\tMax unc. = ({float(torch.amax(inp_std).detach().numpy()) : 0.5f}, {float(torch.amax(out_std).detach().numpy()) : 0.5f})')  
     
