@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 processed/
 temp/
+checkpoints/
 data/gas/ethylene_CO.txt
 data/gas/ethylene_methane.txt
 data/swat/SWaT_Dataset_Attack_v0.csv
