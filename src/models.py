@@ -49,10 +49,10 @@ class FCN2(nn.Module):
         return sum(p.numel() for p in self.fcn.parameters() if p.requires_grad) + sum(p.numel() for p in self.fcn_reverse.parameters() if p.requires_grad)
 
     def forward(self, inp, out):
-        # out2 = 2 * self.fcn(inp) - 0.5
-        # inp2 = 2 * self.fcn_reverse(out) - 0.5
-        out2 = self.fcn(inp)
-        inp2 = self.fcn_reverse(out)
+        out2 = 2 * self.fcn(inp) - 0.5
+        inp2 = 2 * self.fcn_reverse(out) - 0.5
+        # out2 = self.fcn(inp)
+        # inp2 = self.fcn_reverse(out)
         return inp2, out2
 
 class LSTM2(nn.Module):
