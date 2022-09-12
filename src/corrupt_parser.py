@@ -5,8 +5,8 @@ parser.add_argument('--dataset',
 					metavar='-d', 
 					type=str, 
 					required=False,
-					default='MSDS',
-                    help="dataset from ['concrete', 'diamonds', 'energy', 'flights']")
+					default='breast',
+                    help="dataset from ['breast', 'diabetes', 'diamonds', 'energy', 'flights', 'yacht']")
 parser.add_argument('--strategy', 
 					metavar='-s', 
 					type=str, 
