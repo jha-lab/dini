@@ -119,8 +119,8 @@ if __name__ == '__main__':
                         metavar='-d', 
                         type=str, 
                         required=False,
-                        default='MSDS',
-                        help="dataset from ['concrete', 'diamonds', 'energy', 'flights']")
+                        default='breast',
+                        help="dataset from ['breast', 'diabetes', 'diamonds', 'energy', 'flights', 'yacht']")
     parser.add_argument('--strategy', 
                         metavar='-s', 
                         type=str, 
@@ -147,8 +147,8 @@ if __name__ == '__main__':
     inp_m, out_m = torch.isnan(inp_c), torch.isnan(out_c)
     inp_c_imputed, out_c_imputed = init_impute_sep(inp_c, out_c, inp_m, out_m, strategy = 'zero')
 
-    print('Starting MSE:\t', mse(data[data_m], data_c_imputed[data_m]))
-    print('Starting MAE:\t', mae(data[data_m], data_c_imputed[data_m]))
+    print('Starting RMSE:\t', f'{mse(data[data_m], data_c_imputed[data_m], squared=False) : 0.5f}')
+    print('Starting MAE:\t', f'{mae(data[data_m], data_c_imputed[data_m]) : 0.5f}')
 
     # results = {'corrupted': [mse(data[data_m], data_c_imputed[data_m]), mae(data[data_m], data_c_imputed[data_m])]}
     results = {}
@@ -161,10 +161,10 @@ if __name__ == '__main__':
         data_new_m = np.isnan(data_new)
         data_new = init_impute_all(data_new, data_new_m, strategy = 'zero')
 
-        print(f'{model.upper()} MSE:\t', mse(data[data_m], data_new[data_m]))
-        print(f'{model.upper()} MAE:\t', mae(data[data_m], data_new[data_m]))
+        print(f'{model.upper()} RMSE:\t', f'{mse(data[data_m], data_new[data_m], squared=False) : 0.5f}')
+        print(f'{model.upper()} MAE:\t', f'{mae(data[data_m], data_new[data_m]) : 0.5f}')
 
-        results[model] = [mse(data[data_m], data_new[data_m]), mae(data[data_m], data_new[data_m])]
+        results[model] = [mse(data[data_m], data_new[data_m], squared=False), mae(data[data_m], data_new[data_m])]
 
     # Run GMM
     data_new = impute(inp_c, out_c, 'gmm')
@@ -174,18 +174,18 @@ if __name__ == '__main__':
 
     # data_new = gmm_opt(gm, data_c, data_m)
 
-    print(f'GMM MSE:\t', mse(data[data_m], data_new[data_m]))
-    print(f'GMM MAE:\t', mae(data[data_m], data_new[data_m]))
+    print(f'GMM RMSE:\t', f'{mse(data[data_m], data_new[data_m], squared=False) : 0.5f}')
+    print(f'GMM MAE:\t', f'{mae(data[data_m], data_new[data_m]) : 0.5f}')
 
-    results['gmm'] = [mse(data[data_m], data_new[data_m]), mae(data[data_m], data_new[data_m])]
+    results['gmm'] = [mse(data[data_m], data_new[data_m], squared=False), mae(data[data_m], data_new[data_m])]
 
     # Run GAIN
     data_new = impute(inp_c, out_c, 'gain')
 
-    print(f'GAIN MSE:\t', mse(data[data_m], data_new[data_m]))
-    print(f'GAIN MAE:\t', mae(data[data_m], data_new[data_m]))
+    print(f'GAIN RMSE:\t', f'{mse(data[data_m], data_new[data_m], squared=False) : 0.5f}')
+    print(f'GAIN MAE:\t', f'{mae(data[data_m], data_new[data_m]) : 0.5f}')
 
-    results['gain*'] = [mse(data[data_m], data_new[data_m]), mae(data[data_m], data_new[data_m])]
+    results['gain*'] = [mse(data[data_m], data_new[data_m], squared=False), mae(data[data_m], data_new[data_m])]
 
     # Run GRAPE
     parser = argparse.ArgumentParser()
@@ -263,20 +263,21 @@ if __name__ == '__main__':
     pred = np.concatenate([pred_train1, pred_test1, pred_train2, pred_test2])
     labels = np.concatenate([train_labels1, test_labels1, train_labels2, test_labels2])
 
-    print('GRAPE MSE:\t', mse(pred, labels))
-    print('GRAPE MAE:\t', mae(pred, labels))
+    print('GRAPE RMSE:\t', f'{mse(pred, labels, squared=False) : 0.5f}')
+    print('GRAPE MAE:\t', f'{mae(pred, labels) : 0.5f}')
 
-    results['grape*'] = [mse(pred, labels), mae(pred, labels)]
+    results['grape*'] = [mse(pred, labels, squared=False), mae(pred, labels)]
 
     # Run DINI
+    print('Running DINI...')
     num_epochs = 300
-    lf = nn.MSELoss(reduction = 'mean')
+    lf = lambda x, y: torch.sqrt(nn.MSELoss(reduction = 'mean')(x, y) + torch.finfo(torch.float32).eps)
 
     inp, out, inp_c, out_c = load_data_sep(args.dataset)
     inp_m, out_m = torch.isnan(inp_c), torch.isnan(out_c)
     inp_m2, out_m2 = torch.logical_not(inp_m), torch.logical_not(out_m)
     inp_c, out_c = init_impute_sep(inp_c, out_c, inp_m, out_m, strategy = 'zero')
-    inp_c, out_c = inp_c.double(), out_c.double()
+    inp_c, out_c = inp_c.float(), out_c.float()
     model, optimizer, epoch, accuracy_list = load_model('FCN2', inp, out, args.dataset, True, False)
     data_c = torch.cat([inp_c, out_c], dim=1)
     data_m = torch.cat([inp_m, out_m], dim=1)
@@ -287,7 +288,7 @@ if __name__ == '__main__':
 
     if PRETRAIN_DINI:
         print(f'{color.BLUE}Pretraining DINI...{color.ENDC}')
-        dataloader = DataLoader(list(zip(inp_correct.double(), out_correct.double(), torch.Tensor(np.zeros_like(inp_correct, dtype=bool)), torch.Tensor(np.zeros_like(out_correct, dtype=bool)))), batch_size=1, shuffle=False)
+        dataloader = DataLoader(list(zip(inp_correct.float(), out_correct.float(), torch.Tensor(np.zeros_like(inp_correct, dtype=bool)), torch.Tensor(np.zeros_like(out_correct, dtype=bool)))), batch_size=1, shuffle=False)
 
         for e in tqdm(list(range(epoch+1, epoch+100+1)), ncols=80):
             unfreeze_model(model)
@@ -310,22 +311,22 @@ if __name__ == '__main__':
 
         # Tune Data
         freeze_model(model)
-        inp_c, out_c = opt(model, dataloader, use_second_order=USE_SECOND_ORDER)
+        inp_c, out_c, _, _ = opt(model, dataloader, use_second_order=USE_SECOND_ORDER)
         data_c = torch.cat([inp_c, out_c], dim=1)
-        tqdm.write(f'Epoch {e},\tLoss = {loss},\tMSE = {lf(data[data_m], data_c[data_m]).item()},\tMAE = {mae(data[data_m].detach().numpy(), data_c[data_m].detach().numpy())}')  
+        tqdm.write(f'Epoch {e},\tLoss = {loss : 0.5f},\tRMSE = {lf(data[data_m], data_c[data_m]).item() : 0.5f},\tMAE = {mae(data[data_m].detach().numpy(), data_c[data_m].detach().numpy()) : 0.5f}')  
 
         if lf(data[data_m], data_c[data_m]).item() >= old_loss: curr_patience += 1
         if curr_patience > early_stop_patience: break
         old_loss = lf(data[data_m], data_c[data_m]).item()
 
-    print('DINI MSE:\t', lf(data[data_m], data_c[data_m]).item())
-    print('DINI MAE\t', mae(data[data_m].detach().numpy(), data_c[data_m].detach().numpy()))
+    print('DINI RMSE:\t', f'{lf(data[data_m], data_c[data_m]).item() : 0.5f}')
+    print('DINI MAE:\t', f'{mae(data[data_m].detach().numpy(), data_c[data_m].detach().numpy()) : 0.5f}')
 
     results['dini'] = [lf(data[data_m], data_c[data_m]).item(), mae(data[data_m].detach().numpy(), data_c[data_m].detach().numpy())]
 
     os.makedirs('./results/impute/', exist_ok=True)
     df = pd.DataFrame(results)
-    df.index = ['mse', 'mae']
+    df.index = ['rmse', 'mae']
 
     fraction_str = str(args.fraction).split(".")[-1]
     df.to_csv(f'./results/impute/{args.dataset.lower()}_{args.strategy.lower()}_p{fraction_str}.csv')
