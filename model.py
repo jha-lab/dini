@@ -120,7 +120,7 @@ if __name__ == '__main__':
                         metavar='-d', 
                         type=str, 
                         required=False,
-                        default='cps_wdt',
+                        default='gas',
                         help="dataset from ['gas', 'swat', 'coviddeep', 'covid_cxr']")
     parser.add_argument('--strategy', 
                         metavar='-s', 
