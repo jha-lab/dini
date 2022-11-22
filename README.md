@@ -76,6 +76,23 @@ elif dataset == <dataset>:
 ```
 where `<dataset>` is the name of the dataset, and `<out_col>` is the number of output columns in the chosen dataset. 
 
+## Developer
+
+[Shikhar Tuli](https://github.com/shikhartuli). For any questions, comments or suggestions, please reach me at [stuli@princeton.edu](mailto:stuli@princeton.edu).
+
+## Cite this work
+
+Cite our work using the following bitex entry:
+```
+@article{tuli2022sr,
+      title={{DINI}: Data Imputation using Neural Inversion for Edge Applications}, 
+      author={Tuli, Shikhar and Jha, Niraj K.},
+      journal={Scientific Reports},
+      year={2022},
+      publisher={Nature Publishing Group}
+}
+```
+
 ## License
 
 BSD-3-Clause. 
