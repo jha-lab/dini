@@ -78,7 +78,7 @@ where `<dataset>` is the name of the dataset, and `<out_col>` is the number of o
 ## License
 
 BSD-3-Clause. 
-Copyright (c) 2021, JHA-Lab.
+Copyright (c) 2021, Shikhar Tuli and JHA-Lab.
 All rights reserved.
 
 See License file for more details.
