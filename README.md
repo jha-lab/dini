@@ -3,6 +3,7 @@
 ![Python Version](https://img.shields.io/badge/python-v3.9-blue)
 ![Conda](https://img.shields.io/badge/conda%7Cconda--forge-v4.12.0-blue)
 ![PyTorch](https://img.shields.io/badge/pytorch-v1.11.0-e74a2b)
+![Hits](https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2FJHA-Lab%2Fdini&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=hits&edge_flat=false)
 
 DINI is a tool to impute tabular **multi-input/multi-output data** that can have features that are **continuous, categorical, or a combination thereof**. DINI takes in data with missing values, and iteratively imputes it while training a surrogate model that could be leveraged for downstream tasks. This facilitates **machine learning with corrupted/missing data** by state-of-the-art imputation. It works with **any dataset** and **any PyTorch model**.
 
