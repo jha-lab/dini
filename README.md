@@ -88,6 +88,8 @@ Cite our work using the following bitex entry:
       title={{DINI}: Data Imputation using Neural Inversion for Edge Applications}, 
       author={Tuli, Shikhar and Jha, Niraj K.},
       journal={Scientific Reports},
+      volume={12},
+      pages={20210},
       year={2022},
       publisher={Nature Publishing Group}
 }
